@@ -1,0 +1,16 @@
+name: ExtraScenesV2
+version: '${project.version}'
+main: com.extracraft.extrascenesv2.ExtraScenesV2Plugin
+api-version: '1.21'
+author: ExtraCraft
+website: https://extracraft.com
+folia-supported: true
+commands:
+  extrascenes:
+    description: Main command for ExtraScenesV2
+    usage: /extrascenes [info|server]
+    permission: extrascenes.use
+permissions:
+  extrascenes.use:
+    description: Allows using base ExtraScenesV2 commands
+    default: true

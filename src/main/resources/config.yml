@@ -1,0 +1,8 @@
+network:
+  bungee:
+    enabled: true
+
+# Tip for modern network setups:
+# Keep this plugin message bridge enabled when using Bungee/Waterfall.
+# For Velocity modern forwarding, this plugin can be extended later with
+# velocity-specific communication while preserving the same package structure.
