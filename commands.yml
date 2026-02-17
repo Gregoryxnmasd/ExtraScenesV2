@@ -1,0 +1,5 @@
+# ExtraScenesV2 command routing
+# Main command and aliases
+main_command: scene
+aliases:
+  - scenes
