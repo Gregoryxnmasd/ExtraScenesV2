@@ -1,0 +1,4 @@
+commands:
+  scene:
+    aliases:
+      - scenes
