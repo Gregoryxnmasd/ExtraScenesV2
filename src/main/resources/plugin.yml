@@ -7,10 +7,10 @@ website: https://extracraft.com
 folia-supported: true
 commands:
   extrascenes:
-    description: Main command for ExtraScenesV2
-    usage: /extrascenes [info|server]
+    description: Sistema de cinematics
+    usage: /extrascenes <create|delete|addpoint|list|show|play|stop|reload>
     permission: extrascenes.use
 permissions:
   extrascenes.use:
-    description: Allows using base ExtraScenesV2 commands
-    default: true
+    description: Allows using ExtraScenes cinematic commands
+    default: op
