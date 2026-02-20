@@ -100,8 +100,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         sender.sendMessage(ChatColor.GOLD + "Wizard de edición para '" + scene.getId() + "':");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key add " + scene.getId() + " <tick> here");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch");
+        sender.sendMessage(ChatColor.YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|instant]");
+        sender.sendMessage(ChatColor.YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key list " + scene.getId() + " [page]");
     }
@@ -235,7 +235,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
 
-            manager.upsertPoint(state.sceneId, state.currentTick, current.getLocation());
+            manager.upsertPoint(state.sceneId, state.currentTick, current.getLocation(), CinematicPoint.InterpolationMode.SMOOTH);
             state.currentTick += state.everyTicks;
         }, 0L, everyTicks);
 
@@ -291,7 +291,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 5 || !"here".equalsIgnoreCase(args[4])) {
-            sender.sendMessage(ChatColor.RED + "Uso: /scenes key add <scene> <tick> here");
+            sender.sendMessage(ChatColor.RED + "Uso: /scenes key add <scene> <tick> here [smooth|instant]");
             return;
         }
 
@@ -303,7 +303,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        if (!manager.upsertPoint(args[2], tick, player.getLocation())) {
+        CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 6 ? args[5] : null);
+        if (interpolationMode == null) {
+            sender.sendMessage(ChatColor.RED + "interpolation inválida. Usa smooth o instant.");
+            return;
+        }
+
+        if (!manager.upsertPoint(args[2], tick, player.getLocation(), interpolationMode)) {
             sender.sendMessage(ChatColor.RED + "No existe esa escena.");
             return;
         }
@@ -314,7 +320,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKeySet(CommandSender sender, String[] args) {
         if (args.length < 9) {
-            sender.sendMessage(ChatColor.RED + "Uso: /scenes key set <scene> <tick> x y z yaw pitch");
+            sender.sendMessage(ChatColor.RED + "Uso: /scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
             return;
         }
 
@@ -342,8 +348,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 10 ? args[9] : null);
+        if (interpolationMode == null) {
+            sender.sendMessage(ChatColor.RED + "interpolation inválida. Usa smooth o instant.");
+            return;
+        }
+
         Location location = new Location(player.getWorld(), x, y, z, yaw, pitch);
-        if (!manager.upsertPoint(args[2], tick, location)) {
+        if (!manager.upsertPoint(args[2], tick, location, interpolationMode)) {
             sender.sendMessage(ChatColor.RED + "No existe esa escena.");
             return;
         }
@@ -413,7 +425,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         for (int i = from; i < to; i++) {
             CinematicPoint point = points.get(i);
             Location loc = point.location();
-            sender.sendMessage(ChatColor.YELLOW + "t=" + point.tick() + ChatColor.GRAY + " -> "
+            sender.sendMessage(ChatColor.YELLOW + "t=" + point.tick() + ChatColor.GRAY + " ["
+                + point.interpolationMode().name().toLowerCase(Locale.ROOT) + "] -> "
                 + String.format(Locale.US, "%.2f %.2f %.2f %.1f %.1f", loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch()));
         }
     }
@@ -478,8 +491,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key del <scene> <tick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key list <scene> [page]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key clear <scene> confirm");
@@ -510,6 +523,22 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private CinematicPoint.InterpolationMode parseInterpolationMode(String raw) {
+        if (raw == null) {
+            return CinematicPoint.InterpolationMode.SMOOTH;
+        }
+
+        if ("smooth".equalsIgnoreCase(raw)) {
+            return CinematicPoint.InterpolationMode.SMOOTH;
+        }
+
+        if ("instant".equalsIgnoreCase(raw)) {
+            return CinematicPoint.InterpolationMode.INSTANT;
+        }
+
+        return null;
     }
 
     @Override
@@ -544,6 +573,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 5 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("add")) {
             return List.of("here");
+        }
+
+        if (args.length == 6 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("add")) {
+            return List.of("smooth", "instant");
+        }
+
+        if (args.length == 10 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("set")) {
+            return List.of("smooth", "instant");
         }
 
         if (args.length == 4 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("clear")) {
