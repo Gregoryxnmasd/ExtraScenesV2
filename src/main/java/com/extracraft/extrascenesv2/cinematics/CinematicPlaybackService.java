@@ -3,6 +3,15 @@ package com.extracraft.extrascenesv2.cinematics;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.EquipmentSlotGroup;
+import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -10,6 +19,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 public final class CinematicPlaybackService {
+
+    private static final NamespacedKey PUMPKIN_SPEED_PENALTY_KEY =
+            NamespacedKey.fromString("extrascenesv2:cinematic_pumpkin_speed_penalty");
 
     private final JavaPlugin plugin;
     private final Map<UUID, PlaybackState> states = new HashMap<>();
@@ -47,6 +59,7 @@ public final class CinematicPlaybackService {
         }
 
         cancelTask(state);
+        clearFakeHelmet(player);
         return true;
     }
 
@@ -55,6 +68,10 @@ public final class CinematicPlaybackService {
             PlaybackState state = states.remove(playerId);
             if (state != null) {
                 cancelTask(state);
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.isOnline()) {
+                    clearFakeHelmet(player);
+                }
             }
         }
     }
@@ -67,6 +84,7 @@ public final class CinematicPlaybackService {
 
         cancelTask(state);
         state.running = false;
+        clearFakeHelmet(player);
     }
 
     public void handleJoin(Player player) {
@@ -79,6 +97,7 @@ public final class CinematicPlaybackService {
     }
 
     private void startRunning(Player player, PlaybackState state) {
+        applyFakePumpkin(player);
         state.running = true;
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> tick(player), 0L, 1L);
     }
@@ -174,6 +193,33 @@ public final class CinematicPlaybackService {
             state.task.cancel();
             state.task = null;
         }
+    }
+
+    private void applyFakePumpkin(Player player) {
+        player.sendEquipmentChange(player, EquipmentSlot.HEAD, createFakePumpkin());
+    }
+
+    private void clearFakeHelmet(Player player) {
+        ItemStack realHelmet = player.getInventory().getHelmet();
+        player.sendEquipmentChange(player, EquipmentSlot.HEAD, realHelmet);
+    }
+
+    private ItemStack createFakePumpkin() {
+        ItemStack pumpkin = ItemStack.of(Material.CARVED_PUMPKIN);
+        ItemMeta meta = pumpkin.getItemMeta();
+        if (meta == null || PUMPKIN_SPEED_PENALTY_KEY == null) {
+            return pumpkin;
+        }
+
+        AttributeModifier speedPenalty = new AttributeModifier(
+                PUMPKIN_SPEED_PENALTY_KEY,
+                -10.0,
+                AttributeModifier.Operation.ADD_NUMBER,
+                EquipmentSlotGroup.HEAD);
+        meta.addAttributeModifier(Attribute.MOVEMENT_SPEED, speedPenalty);
+        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+        pumpkin.setItemMeta(meta);
+        return pumpkin;
     }
 
     private static final class PlaybackState {
