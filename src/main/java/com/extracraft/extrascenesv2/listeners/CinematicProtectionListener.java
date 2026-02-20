@@ -9,6 +9,9 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 
 public final class CinematicProtectionListener implements Listener {
@@ -53,5 +56,20 @@ public final class CinematicProtectionListener implements Listener {
         if (playbackService.isInCinematic(event.getPlayer())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        playbackService.handleDisconnect(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onKick(PlayerKickEvent event) {
+        playbackService.handleDisconnect(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        playbackService.handleJoin(event.getPlayer());
     }
 }
