@@ -204,7 +204,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "ExtraScenesV2 - comandos:");
+        sender.sendMessage(ChatColor.GOLD + "ExtraScenesV2 - comandos (/extrascenes, /scene, /scenes):");
         sender.sendMessage(ChatColor.YELLOW + "/extrascenes create <id>");
         sender.sendMessage(ChatColor.YELLOW + "/extrascenes addpoint <id> <locked|free> <duracionTicks>");
         sender.sendMessage(ChatColor.YELLOW + "/extrascenes play <id> [jugador]");

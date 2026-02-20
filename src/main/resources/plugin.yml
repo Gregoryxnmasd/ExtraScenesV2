@@ -8,6 +8,7 @@ folia-supported: true
 commands:
   extrascenes:
     description: Sistema de cinematics
+    aliases: [scene, scenes]
     usage: /extrascenes <create|delete|addpoint|list|show|play|stop|reload>
     permission: extrascenes.use
 permissions:
