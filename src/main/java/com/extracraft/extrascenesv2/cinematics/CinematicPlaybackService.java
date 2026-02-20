@@ -1,6 +1,7 @@
 package com.extracraft.extrascenesv2.cinematics;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Material;
@@ -25,6 +26,7 @@ public final class CinematicPlaybackService {
 
     private final JavaPlugin plugin;
     private final Map<UUID, PlaybackState> states = new HashMap<>();
+    private static final double BEZIER_TENSION = 0.82;
 
     public CinematicPlaybackService(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -134,18 +136,18 @@ public final class CinematicPlaybackService {
     }
 
     private Location interpolateLocation(Cinematic cinematic, int tick) {
-        CinematicPoint prev = null;
-        CinematicPoint next = null;
-
-        for (CinematicPoint point : cinematic.getPoints()) {
-            if (point.tick() <= tick) {
-                prev = point;
-            }
-            if (point.tick() >= tick) {
-                next = point;
-                break;
-            }
+        List<CinematicPoint> points = cinematic.getPoints();
+        if (points.isEmpty()) {
+            return null;
         }
+
+        int nextIndex = 0;
+        while (nextIndex < points.size() && points.get(nextIndex).tick() < tick) {
+            nextIndex++;
+        }
+
+        CinematicPoint prev = nextIndex > 0 ? points.get(nextIndex - 1) : null;
+        CinematicPoint next = nextIndex < points.size() ? points.get(nextIndex) : null;
 
         if (prev == null && next == null) {
             return null;
@@ -166,17 +168,29 @@ public final class CinematicPlaybackService {
             return prev.location().clone();
         }
 
-        double t = (tick - prev.tick()) / (double) (next.tick() - prev.tick());
-        Location a = prev.location();
-        Location b = next.location();
+        Location prevLocation = prev.location();
+        Location nextLocation = next.location();
+        double rawT = (tick - prev.tick()) / (double) (next.tick() - prev.tick());
+        double smoothT = smootherStep(rawT);
 
-        double x = lerp(a.getX(), b.getX(), t);
-        double y = lerp(a.getY(), b.getY(), t);
-        double z = lerp(a.getZ(), b.getZ(), t);
-        float yaw = (float) lerpAngle(a.getYaw(), b.getYaw(), t);
-        float pitch = (float) lerp(a.getPitch(), b.getPitch(), t);
+        Location beforeLocation = nextIndex - 2 >= 0 ? points.get(nextIndex - 2).location() : prevLocation;
+        Location afterLocation = nextIndex + 1 < points.size() ? points.get(nextIndex + 1).location() : nextLocation;
 
-        return new Location(a.getWorld(), x, y, z, yaw, pitch);
+        double c1x = prevLocation.getX() + (nextLocation.getX() - beforeLocation.getX()) * (BEZIER_TENSION / 6.0);
+        double c1y = prevLocation.getY() + (nextLocation.getY() - beforeLocation.getY()) * (BEZIER_TENSION / 6.0);
+        double c1z = prevLocation.getZ() + (nextLocation.getZ() - beforeLocation.getZ()) * (BEZIER_TENSION / 6.0);
+
+        double c2x = nextLocation.getX() - (afterLocation.getX() - prevLocation.getX()) * (BEZIER_TENSION / 6.0);
+        double c2y = nextLocation.getY() - (afterLocation.getY() - prevLocation.getY()) * (BEZIER_TENSION / 6.0);
+        double c2z = nextLocation.getZ() - (afterLocation.getZ() - prevLocation.getZ()) * (BEZIER_TENSION / 6.0);
+
+        double x = cubicBezier(prevLocation.getX(), c1x, c2x, nextLocation.getX(), smoothT);
+        double y = cubicBezier(prevLocation.getY(), c1y, c2y, nextLocation.getY(), smoothT);
+        double z = cubicBezier(prevLocation.getZ(), c1z, c2z, nextLocation.getZ(), smoothT);
+        float yaw = (float) lerpAngle(prevLocation.getYaw(), nextLocation.getYaw(), smoothT);
+        float pitch = (float) lerp(prevLocation.getPitch(), nextLocation.getPitch(), smoothT);
+
+        return new Location(prevLocation.getWorld(), x, y, z, yaw, pitch);
     }
 
     private static double lerp(double start, double end, double t) {
@@ -186,6 +200,22 @@ public final class CinematicPlaybackService {
     private static double lerpAngle(double start, double end, double t) {
         double delta = ((end - start + 540.0) % 360.0) - 180.0;
         return start + delta * t;
+    }
+
+    private static double cubicBezier(double p0, double p1, double p2, double p3, double t) {
+        double oneMinusT = 1.0 - t;
+        double oneMinusTSquared = oneMinusT * oneMinusT;
+        double tSquared = t * t;
+
+        return oneMinusTSquared * oneMinusT * p0
+                + 3.0 * oneMinusTSquared * t * p1
+                + 3.0 * oneMinusT * tSquared * p2
+                + tSquared * t * p3;
+    }
+
+    private static double smootherStep(double t) {
+        double clamped = Math.max(0.0, Math.min(1.0, t));
+        return clamped * clamped * clamped * (clamped * (clamped * 6.0 - 15.0) + 10.0);
     }
 
     private static void cancelTask(PlaybackState state) {
