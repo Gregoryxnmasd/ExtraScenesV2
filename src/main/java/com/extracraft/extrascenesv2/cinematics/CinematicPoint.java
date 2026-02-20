@@ -2,4 +2,11 @@ package com.extracraft.extrascenesv2.cinematics;
 
 import org.bukkit.Location;
 
-public record CinematicPoint(int tick, Location location) { }
+public record CinematicPoint(int tick, Location location, PointInterpolation interpolation) {
+
+    public CinematicPoint {
+        if (interpolation == null) {
+            interpolation = PointInterpolation.SMOOTH;
+        }
+    }
+}

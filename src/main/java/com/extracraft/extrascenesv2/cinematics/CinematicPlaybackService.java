@@ -166,6 +166,9 @@ public final class CinematicPlaybackService {
             return prev.location().clone();
         }
 
+        if (next.interpolation() == PointInterpolation.INSTANT && tick < next.tick()) {
+            return prev.location().clone();
+        }
         double t = (tick - prev.tick()) / (double) (next.tick() - prev.tick());
         Location a = prev.location();
         Location b = next.location();

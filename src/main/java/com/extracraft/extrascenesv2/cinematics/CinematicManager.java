@@ -50,7 +50,8 @@ public final class CinematicManager {
                 Object tickObj = pointMap.containsKey("tick") ? pointMap.get("tick") : 0;
                 int tick = Math.max(0, (int) asDouble(tickObj));
 
-                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch)));
+                PointInterpolation interpolation = PointInterpolation.fromString(String.valueOf(pointMap.get("interpolation")));
+                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch), interpolation));
             }
 
             points.sort(Comparator.comparingInt(CinematicPoint::tick));
@@ -74,6 +75,7 @@ public final class CinematicManager {
                 serialized.put("z", loc.getZ());
                 serialized.put("yaw", loc.getYaw());
                 serialized.put("pitch", loc.getPitch());
+                serialized.put("interpolation", point.interpolation().name().toLowerCase(Locale.ROOT));
                 serializedPoints.add(serialized);
             }
             config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
@@ -123,10 +125,30 @@ public final class CinematicManager {
 
         List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
         updated.removeIf(p -> p.tick() == tick);
-        updated.add(new CinematicPoint(Math.max(0, tick), location.clone()));
+        updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), PointInterpolation.SMOOTH));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
         cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
         return true;
+    }
+
+    public boolean setPointInterpolation(String id, int tick, PointInterpolation interpolation) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
+        for (int i = 0; i < updated.size(); i++) {
+            CinematicPoint point = updated.get(i);
+            if (point.tick() == tick) {
+                updated.set(i, new CinematicPoint(point.tick(), point.location().clone(), interpolation));
+                cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public boolean deletePoint(String id, int tick) {
