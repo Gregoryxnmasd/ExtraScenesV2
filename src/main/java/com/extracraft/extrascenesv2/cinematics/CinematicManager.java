@@ -1,6 +1,7 @@
 package com.extracraft.extrascenesv2.cinematics;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,7 @@ public final class CinematicManager {
         }
 
         for (String id : scenesSection.getKeys(false)) {
+            int durationTicks = Math.max(1, scenesSection.getInt(id + ".durationTicks", 200));
             List<CinematicPoint> points = new ArrayList<>();
             List<Map<?, ?>> rawPoints = scenesSection.getMapList(id + ".points");
             for (Map<?, ?> pointMap : rawPoints) {
@@ -45,21 +47,14 @@ public final class CinematicManager {
                 double z = asDouble(pointMap.get("z"));
                 float yaw = (float) asDouble(pointMap.get("yaw"));
                 float pitch = (float) asDouble(pointMap.get("pitch"));
-                String modeRaw = pointMap.containsKey("mode") ? String.valueOf(pointMap.get("mode")) : "FREE";
-                Object durationObj = pointMap.containsKey("duration") ? pointMap.get("duration") : 60;
-                int duration = Math.max(1, (int) asDouble(durationObj));
+                Object tickObj = pointMap.containsKey("tick") ? pointMap.get("tick") : 0;
+                int tick = Math.max(0, (int) asDouble(tickObj));
 
-                CinematicPoint.CameraMode mode;
-                try {
-                    mode = CinematicPoint.CameraMode.valueOf(modeRaw.toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException ignored) {
-                    mode = CinematicPoint.CameraMode.FREE;
-                }
-
-                points.add(new CinematicPoint(new Location(world, x, y, z, yaw, pitch), mode, duration));
+                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch)));
             }
 
-            cinematics.put(normalizeId(id), new Cinematic(id, points));
+            points.sort(Comparator.comparingInt(CinematicPoint::tick));
+            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points));
         }
     }
 
@@ -72,28 +67,28 @@ public final class CinematicManager {
             for (CinematicPoint point : cinematic.getPoints()) {
                 Location loc = point.location();
                 Map<String, Object> serialized = new LinkedHashMap<>();
+                serialized.put("tick", point.tick());
                 serialized.put("world", loc.getWorld() == null ? "world" : loc.getWorld().getName());
                 serialized.put("x", loc.getX());
                 serialized.put("y", loc.getY());
                 serialized.put("z", loc.getZ());
                 serialized.put("yaw", loc.getYaw());
                 serialized.put("pitch", loc.getPitch());
-                serialized.put("mode", point.cameraMode().name());
-                serialized.put("duration", point.durationTicks());
                 serializedPoints.add(serialized);
             }
+            config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
             config.set("cinematics." + cinematic.getId() + ".points", serializedPoints);
         }
 
         plugin.saveConfig();
     }
 
-    public boolean createCinematic(String id) {
+    public boolean createCinematic(String id, int durationTicks) {
         String key = normalizeId(id);
         if (cinematics.containsKey(key)) {
             return false;
         }
-        cinematics.put(key, new Cinematic(id, List.of()));
+        cinematics.put(key, new Cinematic(id, durationTicks, List.of()));
         return true;
     }
 
@@ -109,7 +104,17 @@ public final class CinematicManager {
         return cinematics.values().stream().map(Cinematic::getId).toList();
     }
 
-    public boolean addPoint(String id, CinematicPoint point) {
+    public boolean setDuration(String id, int durationTicks) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints()));
+        return true;
+    }
+
+    public boolean upsertPoint(String id, int tick, Location location) {
         String key = normalizeId(id);
         Cinematic cinematic = cinematics.get(key);
         if (cinematic == null) {
@@ -117,8 +122,37 @@ public final class CinematicManager {
         }
 
         List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
-        updated.add(point);
-        cinematics.put(key, new Cinematic(cinematic.getId(), updated));
+        updated.removeIf(p -> p.tick() == tick);
+        updated.add(new CinematicPoint(Math.max(0, tick), location.clone()));
+        updated.sort(Comparator.comparingInt(CinematicPoint::tick));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        return true;
+    }
+
+    public boolean deletePoint(String id, int tick) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
+        boolean removed = updated.removeIf(p -> p.tick() == tick);
+        if (!removed) {
+            return false;
+        }
+
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        return true;
+    }
+
+    public boolean clearPoints(String id) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of()));
         return true;
     }
 
