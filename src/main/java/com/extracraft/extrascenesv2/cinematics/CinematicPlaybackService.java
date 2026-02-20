@@ -159,6 +159,9 @@ public final class CinematicPlaybackService {
         if (prev.tick() == next.tick()) {
             return prev.location().clone();
         }
+        if (next.interpolationMode() == CinematicPoint.InterpolationMode.INSTANT) {
+            return prev.location().clone();
+        }
         if (prev.location().getWorld() == null || next.location().getWorld() == null) {
             return null;
         }

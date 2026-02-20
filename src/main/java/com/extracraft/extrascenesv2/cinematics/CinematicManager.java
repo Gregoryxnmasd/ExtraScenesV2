@@ -49,8 +49,10 @@ public final class CinematicManager {
                 float pitch = (float) asDouble(pointMap.get("pitch"));
                 Object tickObj = pointMap.containsKey("tick") ? pointMap.get("tick") : 0;
                 int tick = Math.max(0, (int) asDouble(tickObj));
+                CinematicPoint.InterpolationMode interpolationMode = CinematicPoint.InterpolationMode.fromString(
+                        pointMap.containsKey("interpolation") ? String.valueOf(pointMap.get("interpolation")) : null);
 
-                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch)));
+                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch), interpolationMode));
             }
 
             points.sort(Comparator.comparingInt(CinematicPoint::tick));
@@ -74,6 +76,7 @@ public final class CinematicManager {
                 serialized.put("z", loc.getZ());
                 serialized.put("yaw", loc.getYaw());
                 serialized.put("pitch", loc.getPitch());
+                serialized.put("interpolation", point.interpolationMode().name().toLowerCase(Locale.ROOT));
                 serializedPoints.add(serialized);
             }
             config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
@@ -114,7 +117,7 @@ public final class CinematicManager {
         return true;
     }
 
-    public boolean upsertPoint(String id, int tick, Location location) {
+    public boolean upsertPoint(String id, int tick, Location location, CinematicPoint.InterpolationMode interpolationMode) {
         String key = normalizeId(id);
         Cinematic cinematic = cinematics.get(key);
         if (cinematic == null) {
@@ -123,7 +126,7 @@ public final class CinematicManager {
 
         List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
         updated.removeIf(p -> p.tick() == tick);
-        updated.add(new CinematicPoint(Math.max(0, tick), location.clone()));
+        updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), interpolationMode));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
         cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
         return true;
