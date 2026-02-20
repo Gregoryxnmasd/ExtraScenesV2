@@ -41,7 +41,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
             return;
         }
 
-        ExtraScenesCommand executor = new ExtraScenesCommand(cinematicManager, playbackService);
+        ExtraScenesCommand executor = new ExtraScenesCommand(this, cinematicManager, playbackService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
     }

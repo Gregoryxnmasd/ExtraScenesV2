@@ -5,22 +5,11 @@ import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.attribute.AttributeModifier;
-import org.bukkit.attribute.AttributeModifier.Operation;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.EquipmentSlotGroup;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 public final class CinematicPlaybackService {
-
-    private static final String SPEED_MODIFIER_KEY = "cinematic_pumpkin_speed";
 
     private final JavaPlugin plugin;
     private final Map<UUID, PlaybackState> states = new HashMap<>();
@@ -34,14 +23,18 @@ public final class CinematicPlaybackService {
         return state != null && state.running;
     }
 
-    public boolean play(Player player, Cinematic cinematic) {
+    public boolean play(Player player, Cinematic cinematic, int startTick, Integer endTick) {
         if (cinematic.isEmpty()) {
             return false;
         }
 
+        int safeStart = Math.max(0, startTick);
+        int maxEnd = Math.max(0, cinematic.getDurationTicks());
+        int safeEnd = Math.max(safeStart, Math.min(endTick == null ? maxEnd : endTick, maxEnd));
+
         stop(player);
 
-        PlaybackState state = new PlaybackState(cinematic);
+        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd);
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
         return true;
@@ -54,21 +47,14 @@ public final class CinematicPlaybackService {
         }
 
         cancelTask(state);
-        cleanupPlayerEffects(player, state);
         return true;
     }
 
     public void stopAll() {
         for (UUID playerId : states.keySet().toArray(UUID[]::new)) {
             PlaybackState state = states.remove(playerId);
-            if (state == null) {
-                continue;
-            }
-            cancelTask(state);
-
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) {
-                cleanupPlayerEffects(player, state);
+            if (state != null) {
+                cancelTask(state);
             }
         }
     }
@@ -80,7 +66,6 @@ public final class CinematicPlaybackService {
         }
 
         cancelTask(state);
-        cleanupPlayerEffects(player, state);
         state.running = false;
     }
 
@@ -95,7 +80,6 @@ public final class CinematicPlaybackService {
 
     private void startRunning(Player player, PlaybackState state) {
         state.running = true;
-        applyPlayerEffects(player, state);
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> tick(player), 0L, 1L);
     }
 
@@ -111,75 +95,78 @@ public final class CinematicPlaybackService {
                 return;
             }
 
-            if (state.pointIndex >= state.cinematic.getPoints().size()) {
+            if (state.currentTick > state.endTick) {
                 stop(player);
                 return;
             }
 
-            CinematicPoint point = state.cinematic.getPoints().get(state.pointIndex);
-            if (state.ticksAtPoint == 0) {
-                Location destination = point.location().clone();
-                if (destination.getWorld() == null) {
-                    stop(player);
-                    return;
-                }
-                player.teleport(destination);
+            Location destination = interpolateLocation(state.cinematic, state.currentTick);
+            if (destination == null || destination.getWorld() == null) {
+                stop(player);
+                return;
             }
 
-            if (point.cameraMode() == CinematicPoint.CameraMode.LOCKED) {
-                player.setRotation(point.location().getYaw(), point.location().getPitch());
-                if (player.getLocation().distanceSquared(point.location()) > 0.01) {
-                    player.teleport(point.location());
-                }
-            }
-
-            state.ticksAtPoint++;
-            if (state.ticksAtPoint >= point.durationTicks()) {
-                state.pointIndex++;
-                state.ticksAtPoint = 0;
-            }
+            player.teleport(destination);
+            state.currentTick++;
         } catch (Exception ex) {
-            plugin.getLogger().severe("Error en cinemática para " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Error en escena para " + player.getName() + ": " + ex.getMessage());
             stop(player);
         }
     }
 
-    private void applyPlayerEffects(Player player, PlaybackState state) {
-        state.originalWalkSpeed = player.getWalkSpeed();
+    private Location interpolateLocation(Cinematic cinematic, int tick) {
+        CinematicPoint prev = null;
+        CinematicPoint next = null;
 
-        ItemStack fakePumpkin = new ItemStack(Material.CARVED_PUMPKIN);
-        player.sendEquipmentChange(player, EquipmentSlot.HEAD, fakePumpkin);
-
-        AttributeInstance movement = player.getAttribute(Attribute.MOVEMENT_SPEED);
-        if (movement != null) {
-            removeSpeedModifier(movement, state);
-            AttributeModifier modifier = new AttributeModifier(
-                new NamespacedKey(plugin, SPEED_MODIFIER_KEY),
-                -10.0,
-                Operation.ADD_NUMBER,
-                EquipmentSlotGroup.HEAD
-            );
-            movement.addModifier(modifier);
-            state.appliedSpeedModifier = modifier;
+        for (CinematicPoint point : cinematic.getPoints()) {
+            if (point.tick() <= tick) {
+                prev = point;
+            }
+            if (point.tick() >= tick) {
+                next = point;
+                break;
+            }
         }
+
+        if (prev == null && next == null) {
+            return null;
+        }
+        if (prev == null) {
+            return next.location().clone();
+        }
+        if (next == null) {
+            return prev.location().clone();
+        }
+        if (prev.tick() == next.tick()) {
+            return prev.location().clone();
+        }
+        if (prev.location().getWorld() == null || next.location().getWorld() == null) {
+            return null;
+        }
+        if (!prev.location().getWorld().equals(next.location().getWorld())) {
+            return prev.location().clone();
+        }
+
+        double t = (tick - prev.tick()) / (double) (next.tick() - prev.tick());
+        Location a = prev.location();
+        Location b = next.location();
+
+        double x = lerp(a.getX(), b.getX(), t);
+        double y = lerp(a.getY(), b.getY(), t);
+        double z = lerp(a.getZ(), b.getZ(), t);
+        float yaw = (float) lerpAngle(a.getYaw(), b.getYaw(), t);
+        float pitch = (float) lerp(a.getPitch(), b.getPitch(), t);
+
+        return new Location(a.getWorld(), x, y, z, yaw, pitch);
     }
 
-    private void cleanupPlayerEffects(Player player, PlaybackState state) {
-        player.sendEquipmentChange(player, EquipmentSlot.HEAD, player.getInventory().getHelmet());
-
-        AttributeInstance movement = player.getAttribute(Attribute.MOVEMENT_SPEED);
-        if (movement != null) {
-            removeSpeedModifier(movement, state);
-        }
-
-        player.setWalkSpeed(state.originalWalkSpeed);
+    private static double lerp(double start, double end, double t) {
+        return start + (end - start) * t;
     }
 
-    private void removeSpeedModifier(AttributeInstance movement, PlaybackState state) {
-        if (state.appliedSpeedModifier != null) {
-            movement.removeModifier(state.appliedSpeedModifier);
-            state.appliedSpeedModifier = null;
-        }
+    private static double lerpAngle(double start, double end, double t) {
+        double delta = ((end - start + 540.0) % 360.0) - 180.0;
+        return start + delta * t;
     }
 
     private static void cancelTask(PlaybackState state) {
@@ -191,15 +178,15 @@ public final class CinematicPlaybackService {
 
     private static final class PlaybackState {
         private final Cinematic cinematic;
-        private int pointIndex;
-        private int ticksAtPoint;
+        private final int endTick;
+        private int currentTick;
         private boolean running;
         private BukkitTask task;
-        private float originalWalkSpeed;
-        private AttributeModifier appliedSpeedModifier;
 
-        private PlaybackState(Cinematic cinematic) {
+        private PlaybackState(Cinematic cinematic, int startTick, int endTick) {
             this.cinematic = cinematic;
+            this.currentTick = startTick;
+            this.endTick = endTick;
         }
     }
 }

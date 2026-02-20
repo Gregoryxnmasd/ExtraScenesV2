@@ -7,9 +7,9 @@ website: https://extracraft.com
 folia-supported: true
 commands:
   extrascenes:
-    description: Sistema de cinematics
-    aliases: [scene, scenes]
-    usage: /extrascenes <create|delete|addpoint|list|show|play|stop|reload>
+    description: Sistema de escenas
+    usage: /extrascenes <create|edit|play|stop|record|key|delete|list|show|reload>
+    aliases: [scenes]
     permission: extrascenes.use
 permissions:
   extrascenes.use:
