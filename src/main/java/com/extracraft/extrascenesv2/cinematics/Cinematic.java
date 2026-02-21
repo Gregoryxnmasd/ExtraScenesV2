@@ -14,22 +14,24 @@ public final class Cinematic {
     private final List<CinematicPoint> points;
     private final EndAction endAction;
     private final Map<Integer, List<String>> tickCommands;
+    private final Map<String, SceneActor> actors;
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points) {
-        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of());
+        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of(), Map.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction) {
-        this(id, durationTicks, points, endAction, Map.of());
+        this(id, durationTicks, points, endAction, Map.of(), Map.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
-                     Map<Integer, List<String>> tickCommands) {
+                     Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors) {
         this.id = id;
         this.durationTicks = Math.max(1, durationTicks);
         this.points = new ArrayList<>(points);
         this.endAction = endAction == null ? EndAction.stayAtLastCameraPoint() : endAction;
         this.tickCommands = deepCopyTickCommands(tickCommands);
+        this.actors = deepCopyActors(actors);
     }
 
     public String getId() {
@@ -54,6 +56,26 @@ public final class Cinematic {
 
     public Map<Integer, List<String>> getTickCommands() {
         return tickCommands;
+    }
+
+    public Map<String, SceneActor> getActors() {
+        return actors;
+    }
+
+
+    private Map<String, SceneActor> deepCopyActors(Map<String, SceneActor> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, SceneActor> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, SceneActor> entry : source.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            copy.put(entry.getKey().toLowerCase(java.util.Locale.ROOT), entry.getValue());
+        }
+        return Collections.unmodifiableMap(copy);
     }
 
     private Map<Integer, List<String>> deepCopyTickCommands(Map<Integer, List<String>> source) {
