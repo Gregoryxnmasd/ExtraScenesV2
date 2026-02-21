@@ -56,7 +56,10 @@ public final class CinematicManager {
             }
 
             points.sort(Comparator.comparingInt(CinematicPoint::tick));
-            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points));
+
+            ConfigurationSection endActionSection = scenesSection.getConfigurationSection(id + ".endAction");
+            Cinematic.EndAction endAction = parseEndAction(endActionSection);
+            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction));
         }
     }
 
@@ -81,6 +84,21 @@ public final class CinematicManager {
             }
             config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
             config.set("cinematics." + cinematic.getId() + ".points", serializedPoints);
+
+            String endActionPath = "cinematics." + cinematic.getId() + ".endAction";
+            config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
+            Location teleportLocation = cinematic.getEndAction().teleportLocation();
+            if (teleportLocation == null || teleportLocation.getWorld() == null) {
+                config.set(endActionPath + ".teleport", null);
+                continue;
+            }
+
+            config.set(endActionPath + ".teleport.world", teleportLocation.getWorld().getName());
+            config.set(endActionPath + ".teleport.x", teleportLocation.getX());
+            config.set(endActionPath + ".teleport.y", teleportLocation.getY());
+            config.set(endActionPath + ".teleport.z", teleportLocation.getZ());
+            config.set(endActionPath + ".teleport.yaw", teleportLocation.getYaw());
+            config.set(endActionPath + ".teleport.pitch", teleportLocation.getPitch());
         }
 
         plugin.saveConfig();
@@ -91,7 +109,7 @@ public final class CinematicManager {
         if (cinematics.containsKey(key)) {
             return false;
         }
-        cinematics.put(key, new Cinematic(id, durationTicks, List.of()));
+        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint()));
         return true;
     }
 
@@ -113,7 +131,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction()));
         return true;
     }
 
@@ -128,7 +146,7 @@ public final class CinematicManager {
         updated.removeIf(p -> p.tick() == tick);
         updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), interpolationMode));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
         return true;
     }
 
@@ -145,7 +163,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
         return true;
     }
 
@@ -174,7 +192,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
         return true;
     }
 
@@ -184,8 +202,48 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction()));
         return true;
+    }
+
+    public boolean setEndAction(String id, Cinematic.EndAction endAction) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction));
+        return true;
+    }
+
+    private static Cinematic.EndAction parseEndAction(ConfigurationSection section) {
+        if (section == null) {
+            return Cinematic.EndAction.stayAtLastCameraPoint();
+        }
+
+        Cinematic.EndActionType type = Cinematic.EndActionType.fromString(section.getString("type"));
+        if (type != Cinematic.EndActionType.TELEPORT) {
+            return type == Cinematic.EndActionType.RETURN_TO_START
+                    ? Cinematic.EndAction.returnToStart()
+                    : Cinematic.EndAction.stayAtLastCameraPoint();
+        }
+
+        ConfigurationSection teleportSection = section.getConfigurationSection("teleport");
+        if (teleportSection == null) {
+            return Cinematic.EndAction.stayAtLastCameraPoint();
+        }
+
+        World world = Bukkit.getWorld(teleportSection.getString("world", ""));
+        if (world == null) {
+            return Cinematic.EndAction.stayAtLastCameraPoint();
+        }
+
+        double x = teleportSection.getDouble("x");
+        double y = teleportSection.getDouble("y");
+        double z = teleportSection.getDouble("z");
+        float yaw = (float) teleportSection.getDouble("yaw");
+        float pitch = (float) teleportSection.getDouble("pitch");
+        return Cinematic.EndAction.teleportTo(new Location(world, x, y, z, yaw, pitch));
     }
 
     private String normalizeId(String id) {

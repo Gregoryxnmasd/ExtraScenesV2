@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.bukkit.World;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -25,7 +26,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "key", "delete", "list", "show", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "key", "finish", "delete", "list", "show", "reload");
 
     private final JavaPlugin plugin;
     private final CinematicManager manager;
@@ -52,6 +53,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "stop" -> handleStop(sender, args);
             case "record" -> handleRecord(sender, args);
             case "key" -> handleKey(sender, args);
+            case "finish" -> handleFinish(sender, args);
             case "delete" -> handleDelete(sender, args);
             case "list" -> handleList(sender);
             case "show" -> handleShow(sender, args);
@@ -105,6 +107,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key list " + scene.getId() + " [page]");
+        sender.sendMessage(ChatColor.YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
     }
 
     private void handlePlay(CommandSender sender, String[] args) {
@@ -478,6 +481,72 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GREEN + "Todos los keyframes fueron eliminados.");
     }
 
+
+    private void handleFinish(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Uso: /scenes finish <scene> <return|stay|teleport_here|teleport>");
+            return;
+        }
+
+        String sceneId = args[1];
+        String mode = args[2].toLowerCase(Locale.ROOT);
+        Cinematic.EndAction endAction;
+
+        switch (mode) {
+            case "return" -> endAction = Cinematic.EndAction.returnToStart();
+            case "stay" -> endAction = Cinematic.EndAction.stayAtLastCameraPoint();
+            case "teleport_here" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + "Solo jugadores pueden usar teleport_here.");
+                    return;
+                }
+                endAction = Cinematic.EndAction.teleportTo(player.getLocation());
+            }
+            case "teleport" -> {
+                if (args.length < 9) {
+                    sender.sendMessage(ChatColor.RED + "Uso: /scenes finish <scene> teleport <world> <x> <y> <z> <yaw> <pitch>");
+                    return;
+                }
+
+                World world = Bukkit.getWorld(args[3]);
+                if (world == null) {
+                    sender.sendMessage(ChatColor.RED + "Mundo inválido: " + args[3]);
+                    return;
+                }
+
+                double x;
+                double y;
+                double z;
+                float yaw;
+                float pitch;
+                try {
+                    x = Double.parseDouble(args[4]);
+                    y = Double.parseDouble(args[5]);
+                    z = Double.parseDouble(args[6]);
+                    yaw = Float.parseFloat(args[7]);
+                    pitch = Float.parseFloat(args[8]);
+                } catch (NumberFormatException ex) {
+                    sender.sendMessage(ChatColor.RED + "Coordenadas inválidas.");
+                    return;
+                }
+
+                endAction = Cinematic.EndAction.teleportTo(new Location(world, x, y, z, yaw, pitch));
+            }
+            default -> {
+                sender.sendMessage(ChatColor.RED + "Modo inválido. Usa return, stay, teleport_here o teleport.");
+                return;
+            }
+        }
+
+        if (!manager.setEndAction(sceneId, endAction)) {
+            sender.sendMessage(ChatColor.RED + "No existe esa escena.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Comportamiento final actualizado para '" + sceneId + "'.");
+    }
+
     private void handleDelete(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(ChatColor.RED + "Uso: /scenes delete <scene>");
@@ -512,6 +581,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         sender.sendMessage(ChatColor.GOLD + "Escena " + cinematic.getId() + ChatColor.GRAY + " -> duración " + cinematic.getDurationTicks() + "t, " + cinematic.getPoints().size() + " keyframes");
+        sender.sendMessage(ChatColor.GRAY + "Final: " + describeEndAction(cinematic.getEndAction()));
     }
 
     private void sendHelp(CommandSender sender, String label) {
@@ -529,6 +599,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes key del <scene> <tick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key list <scene> [page]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key clear <scene> confirm");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
     }
 
     private boolean stopAndRemoveRecording(UUID playerId) {
@@ -574,13 +645,38 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         return null;
     }
 
+
+    private String describeEndAction(Cinematic.EndAction endAction) {
+        if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
+            return "volver al punto inicial";
+        }
+
+        if (endAction.type() == Cinematic.EndActionType.TELEPORT) {
+            Location target = endAction.teleportLocation();
+            if (target == null || target.getWorld() == null) {
+                return "teleport sin destino (usa /scenes finish para configurarlo)";
+            }
+
+            return String.format(Locale.US,
+                    "teleport a %s %.2f %.2f %.2f %.1f %.1f",
+                    target.getWorld().getName(),
+                    target.getX(),
+                    target.getY(),
+                    target.getZ(),
+                    target.getYaw(),
+                    target.getPitch());
+        }
+
+        return "quedarse en el último punto de cámara";
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             return SUBCOMMANDS.stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
 
-        if (args.length == 2 && Arrays.asList("edit", "play", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 2 && Arrays.asList("edit", "play", "delete", "show", "finish").contains(args[0].toLowerCase(Locale.ROOT))) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[1])).toList();
         }
 
@@ -590,6 +686,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 3 && Arrays.asList("play", "edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Collections.emptyList();
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("finish")) {
+            return List.of("return", "stay", "teleport_here", "teleport");
+        }
+
+        if (args.length == 4 && args[0].equalsIgnoreCase("finish") && args[2].equalsIgnoreCase("teleport")) {
+            return Bukkit.getWorlds().stream().map(World::getName).filter(s -> s.startsWith(args[3])).toList();
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("record") && Arrays.asList("start", "clear").contains(args[1].toLowerCase(Locale.ROOT))) {
