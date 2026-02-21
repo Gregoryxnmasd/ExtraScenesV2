@@ -102,6 +102,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "Wizard de edición para '" + scene.getId() + "':");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|instant]");
+        sender.sendMessage(ChatColor.YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(ChatColor.YELLOW + "- /scenes key list " + scene.getId() + " [page]");
     }
@@ -270,17 +271,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKey(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Uso: /scenes key <add|set|del|list|clear>");
+            sender.sendMessage(ChatColor.RED + "Uso: /scenes key <add|set|mode|del|list|clear>");
             return;
         }
 
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "add" -> handleKeyAdd(sender, args);
             case "set" -> handleKeySet(sender, args);
+            case "mode" -> handleKeyMode(sender, args);
             case "del" -> handleKeyDel(sender, args);
             case "list" -> handleKeyList(sender, args);
             case "clear" -> handleKeyClear(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Uso: /scenes key <add|set|del|list|clear>");
+            default -> sender.sendMessage(ChatColor.RED + "Uso: /scenes key <add|set|mode|del|list|clear>");
         }
     }
 
@@ -385,6 +387,36 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         manager.save();
         sender.sendMessage(ChatColor.GREEN + "Keyframe eliminado en tick " + tick + ".");
+    }
+
+    private void handleKeyMode(CommandSender sender, String[] args) {
+        if (args.length < 5) {
+            sender.sendMessage(ChatColor.RED + "Uso: /scenes key mode <scene> <tick> <smooth|instant>");
+            return;
+        }
+
+        int tick;
+        try {
+            tick = Math.max(0, Integer.parseInt(args[3]));
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(ChatColor.RED + "tick inválido.");
+            return;
+        }
+
+        CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args[4]);
+        if (interpolationMode == null) {
+            sender.sendMessage(ChatColor.RED + "interpolation inválida. Usa smooth o instant.");
+            return;
+        }
+
+        if (!manager.setPointInterpolation(args[2], tick, interpolationMode)) {
+            sender.sendMessage(ChatColor.RED + "No existe escena o no existe keyframe en ese tick.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Interpolación actualizada en tick " + tick + " a "
+            + interpolationMode.name().toLowerCase(Locale.ROOT) + ".");
     }
 
     private void handleKeyList(CommandSender sender, String[] args) {
@@ -493,6 +525,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key del <scene> <tick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key list <scene> [page]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key clear <scene> confirm");
@@ -564,7 +597,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("key")) {
-            return List.of("add", "set", "del", "list", "clear");
+            return List.of("add", "set", "mode", "del", "list", "clear");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("key")) {
@@ -580,6 +613,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 10 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("set")) {
+            return List.of("smooth", "instant");
+        }
+
+        if (args.length == 5 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("mode")) {
             return List.of("smooth", "instant");
         }
 
