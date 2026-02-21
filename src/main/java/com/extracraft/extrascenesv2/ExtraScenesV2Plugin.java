@@ -40,6 +40,10 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         return playbackService;
     }
 
+    public CinematicManager getCinematicManager() {
+        return cinematicManager;
+    }
+
     private void registerCommands() {
         PluginCommand command = getCommand("extrascenes");
         if (command == null) {

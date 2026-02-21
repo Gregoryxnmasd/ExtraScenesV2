@@ -622,15 +622,25 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handlePlaceholders(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "Available placeholders:");
-        sender.sendMessage(ChatColor.GRAY + "Compatible with PlaceholderAPI (%placeholder%).");
-        sender.sendMessage(ChatColor.YELLOW + "{player}" + ChatColor.GRAY + " player name");
-        sender.sendMessage(ChatColor.YELLOW + "{player_display_name}" + ChatColor.GRAY + " display name");
-        sender.sendMessage(ChatColor.YELLOW + "{player_uuid}" + ChatColor.GRAY + " UUID");
-        sender.sendMessage(ChatColor.YELLOW + "{scene}" + ChatColor.GRAY + " scene ID");
-        sender.sendMessage(ChatColor.YELLOW + "{tick}" + ChatColor.GRAY + " current playback tick");
-        sender.sendMessage(ChatColor.YELLOW + "{world} {x} {y} {z} {yaw} {pitch}" + ChatColor.GRAY + " current location");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<cinematic>_<player>%" + ChatColor.GRAY + " true/false if that player has already watched the cinematic");
+        sender.sendMessage(ChatColor.GOLD + "Placeholders disponibles de PlaceholderAPI:");
+        sender.sendMessage(ChatColor.GRAY + "Formato general: %scenes_<placeholder>%");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_playing%" + ChatColor.GRAY + " true/false si el jugador está en una escena");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_current_scene%" + ChatColor.GRAY + " id de la escena actual (o none)");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_current_tick%" + ChatColor.GRAY + " tick actual de reproducción");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_end_tick%" + ChatColor.GRAY + " tick final del tramo actual");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_progress_percent%" + ChatColor.GRAY + " progreso de la escena actual (0-100)");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_count%" + ChatColor.GRAY + " cantidad de escenas vistas por el jugador");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_list%" + ChatColor.GRAY + " lista de escenas vistas separada por comas");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<scene>%" + ChatColor.GRAY + " true/false si el jugador vio esa escena");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<scene>_<player>%" + ChatColor.GRAY + " versión para otro jugador");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_duration_<scene>%" + ChatColor.GRAY + " duración total en ticks");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_points_<scene>%" + ChatColor.GRAY + " cantidad de keyframes");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_commands_<scene>%" + ChatColor.GRAY + " cantidad de comandos por tick");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_scenes_count%" + ChatColor.GRAY + " total de escenas cargadas");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_scenes_list%" + ChatColor.GRAY + " ids de escenas cargadas separadas por comas");
+        sender.sendMessage(ChatColor.DARK_AQUA + "También puedes usar placeholders internos en tickcmd (no PAPI):");
+        sender.sendMessage(ChatColor.YELLOW + "{player} {player_display_name} {player_uuid} {scene} {tick}");
+        sender.sendMessage(ChatColor.YELLOW + "{world} {x} {y} {z} {yaw} {pitch}");
     }
 
     private void handleFinish(CommandSender sender, String[] args) {
