@@ -157,7 +157,7 @@ public final class CinematicPlaybackService {
             runTickCommands(player, state);
             state.currentTick++;
         } catch (Exception ex) {
-            plugin.getLogger().severe("Error en escena para " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Scene error for " + player.getName() + ": " + ex.getMessage());
             stop(player);
         }
     }
