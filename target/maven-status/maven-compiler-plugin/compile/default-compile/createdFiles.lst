@@ -1,0 +1,17 @@
+com\extracraft\extrascenesv2\commands\ExtraScenesCommand.class
+com\extracraft\extrascenesv2\cinematics\CinematicPoint$InterpolationMode.class
+com\extracraft\extrascenesv2\placeholders\PlaceholderResolver.class
+com\extracraft\extrascenesv2\cinematics\Cinematic$EndAction.class
+com\extracraft\extrascenesv2\cinematics\CinematicManager.class
+com\extracraft\extrascenesv2\cinematics\Cinematic.class
+com\extracraft\extrascenesv2\network\BungeeMessenger.class
+com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService$PlaybackState.class
+com\extracraft\extrascenesv2\cinematics\Cinematic$EndActionType.class
+com\extrascenesv2\ExtraScenesPlugin.class
+com\extracraft\extrascenesv2\commands\ExtraScenesCommand$RecordingState.class
+com\extracraft\extrascenesv2\placeholders\ScenesPlaceholderExpansion.class
+com\extracraft\extrascenesv2\listeners\CinematicProtectionListener.class
+com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService.class
+com\extrascenesv2\SceneCommandExecutor.class
+com\extracraft\extrascenesv2\ExtraScenesV2Plugin.class
+com\extracraft\extrascenesv2\cinematics\CinematicPoint.class
