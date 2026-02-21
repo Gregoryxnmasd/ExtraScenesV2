@@ -10,15 +10,11 @@ import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ActorPlaybackService {
@@ -41,9 +37,9 @@ public final class ActorPlaybackService {
             if (isExcluded(actor, excludedActorId) || !actor.isVisibleAtTick(tick)) {
                 continue;
             }
-            ArmorStand stand = spawnActor(viewer, actor, sample(actor.frames(), tick));
-            if (stand != null) {
-                entities.put(key(actor.id()), stand.getUniqueId());
+            Entity entity = spawnActor(viewer, actor, sample(actor.frames(), tick));
+            if (entity != null) {
+                entities.put(key(actor.id()), entity.getUniqueId());
             }
         }
         spawned.put(viewer.getUniqueId(), entities);
@@ -70,14 +66,14 @@ public final class ActorPlaybackService {
 
             UUID entityId = entities.get(actorKey);
             Entity entity = entityId == null ? null : Bukkit.getEntity(entityId);
-            if (!(entity instanceof ArmorStand stand) || !stand.isValid()) {
-                ArmorStand created = spawnActor(viewer, actor, next);
+            if (!(entity instanceof Player playerActor) || !playerActor.isValid()) {
+                Entity created = spawnActor(viewer, actor, next);
                 if (created != null) {
                     entities.put(actorKey, created.getUniqueId());
                 }
                 continue;
             }
-            stand.teleport(next);
+            playerActor.teleport(next);
         }
     }
 
@@ -91,48 +87,43 @@ public final class ActorPlaybackService {
         }
     }
 
-    private ArmorStand spawnActor(Player viewer, SceneActor actor, Location initial) {
+    private Entity spawnActor(Player viewer, SceneActor actor, Location initial) {
         if (initial == null || initial.getWorld() == null) {
             return null;
         }
-        ArmorStand stand = (ArmorStand) initial.getWorld().spawnEntity(initial, EntityType.ARMOR_STAND);
-        stand.setGravity(false);
-        stand.setInvulnerable(true);
-        stand.setAI(false);
-        stand.setCanTick(false);
-        stand.setCustomNameVisible(false);
-        stand.customName(null);
-        stand.setVisible(true);
-        stand.setMarker(false);
 
-        AttributeInstance scaleAttribute = stand.getAttribute(Attribute.SCALE);
+        Entity spawned = initial.getWorld().spawnEntity(initial, EntityType.PLAYER);
+        if (!(spawned instanceof Player actorEntity)) {
+            spawned.remove();
+            return null;
+        }
+
+        actorEntity.setInvulnerable(true);
+        actorEntity.setGravity(false);
+        actorEntity.setAI(false);
+        actorEntity.setCanPickupItems(false);
+        actorEntity.setSilent(true);
+        actorEntity.setCollidable(false);
+        actorEntity.setCustomNameVisible(false);
+        actorEntity.customName(null);
+
+        AttributeInstance scaleAttribute = actorEntity.getAttribute(Attribute.SCALE);
         if (scaleAttribute != null) {
             scaleAttribute.setBaseValue(actor.scale());
         }
 
-        if (actor.skinTexture() != null && actor.skinSignature() != null && stand.getEquipment() != null) {
-            stand.getEquipment().setHelmet(createSkull(actor));
+        if (actor.skinTexture() != null && actor.skinSignature() != null) {
+            PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), actor.displayName());
+            profile.setProperty(new ProfileProperty("textures", actor.skinTexture(), actor.skinSignature()));
+            actorEntity.setPlayerProfile(profile);
         }
 
         for (Player online : plugin.getServer().getOnlinePlayers()) {
             if (!online.getUniqueId().equals(viewer.getUniqueId())) {
-                online.hideEntity(plugin, stand);
+                online.hideEntity(plugin, actorEntity);
             }
         }
-        return stand;
-    }
-
-    private ItemStack createSkull(SceneActor actor) {
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta meta = (SkullMeta) item.getItemMeta();
-        if (meta == null) {
-            return item;
-        }
-        PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), actor.displayName());
-        profile.setProperty(new ProfileProperty("textures", actor.skinTexture(), actor.skinSignature()));
-        meta.setPlayerProfile(profile);
-        item.setItemMeta(meta);
-        return item;
+        return actorEntity;
     }
 
     private Location sample(List<ActorFrame> frames, int tick) {
