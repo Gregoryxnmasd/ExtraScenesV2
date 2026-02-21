@@ -5,6 +5,7 @@ api-version: '1.21'
 author: ExtraCraft
 website: https://extracraft.com
 folia-supported: true
+depend: [PlaceholderAPI]
 commands:
   extrascenes:
     description: Sistema de escenas

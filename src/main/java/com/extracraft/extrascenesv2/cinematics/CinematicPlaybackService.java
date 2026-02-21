@@ -2,7 +2,10 @@ package com.extracraft.extrascenesv2.cinematics;
 
 import com.extracraft.extrascenesv2.placeholders.PlaceholderResolver;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
@@ -29,6 +32,7 @@ public final class CinematicPlaybackService {
 
     private final JavaPlugin plugin;
     private final Map<UUID, PlaybackState> states = new HashMap<>();
+    private final Map<UUID, Set<String>> playedCinematics = new HashMap<>();
     private final PlaceholderResolver placeholderResolver;
     private static final double BEZIER_TENSION = 0.82;
 
@@ -57,10 +61,20 @@ public final class CinematicPlaybackService {
 
         stop(player);
 
-        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, player.getLocation(), player.getGameMode());
+        boolean fullPlayback = safeStart == 0 && safeEnd >= maxEnd;
+        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, fullPlayback, player.getLocation(), player.getGameMode());
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
         return true;
+    }
+
+    public boolean hasPlayerPlayed(String cinematicId, UUID playerId) {
+        if (cinematicId == null || cinematicId.isBlank() || playerId == null) {
+            return false;
+        }
+
+        Set<String> played = playedCinematics.get(playerId);
+        return played != null && played.contains(normalizeId(cinematicId));
     }
 
     public boolean stop(Player player) {
@@ -166,6 +180,10 @@ public final class CinematicPlaybackService {
     }
 
     private void finishPlayback(Player player, PlaybackState state) {
+        if (state.fullPlayback) {
+            markAsPlayed(player.getUniqueId(), state.cinematic.getId());
+        }
+
         Cinematic.EndAction endAction = state.cinematic.getEndAction();
         if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
             if (state.startLocation != null && state.startLocation.getWorld() != null) {
@@ -282,6 +300,20 @@ public final class CinematicPlaybackService {
         return clamped * clamped * clamped * (clamped * (clamped * 6.0 - 15.0) + 10.0);
     }
 
+    private void markAsPlayed(UUID playerId, String cinematicId) {
+        if (cinematicId == null || cinematicId.isBlank()) {
+            return;
+        }
+
+        playedCinematics
+                .computeIfAbsent(playerId, ignored -> new HashSet<>())
+                .add(normalizeId(cinematicId));
+    }
+
+    private static String normalizeId(String cinematicId) {
+        return cinematicId.toLowerCase(Locale.ROOT);
+    }
+
     private static void cancelTask(PlaybackState state) {
         if (state.task != null) {
             state.task.cancel();
@@ -354,6 +386,7 @@ public final class CinematicPlaybackService {
     private static final class PlaybackState {
         private final Cinematic cinematic;
         private final int endTick;
+        private final boolean fullPlayback;
         private final Location startLocation;
         private final GameMode originalGameMode;
         private int currentTick;
@@ -361,10 +394,11 @@ public final class CinematicPlaybackService {
         private boolean changedGameMode;
         private BukkitTask task;
 
-        private PlaybackState(Cinematic cinematic, int startTick, int endTick, Location startLocation, GameMode originalGameMode) {
+        private PlaybackState(Cinematic cinematic, int startTick, int endTick, boolean fullPlayback, Location startLocation, GameMode originalGameMode) {
             this.cinematic = cinematic;
             this.currentTick = startTick;
             this.endTick = endTick;
+            this.fullPlayback = fullPlayback;
             this.startLocation = startLocation == null ? null : startLocation.clone();
             this.originalGameMode = originalGameMode;
         }

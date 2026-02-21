@@ -623,12 +623,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handlePlaceholders(CommandSender sender) {
         sender.sendMessage(ChatColor.GOLD + "Placeholders disponibles:");
+        sender.sendMessage(ChatColor.GRAY + "Compatibles con PlaceholderAPI (%placeholder%).");
         sender.sendMessage(ChatColor.YELLOW + "{player}" + ChatColor.GRAY + " nombre del jugador");
         sender.sendMessage(ChatColor.YELLOW + "{player_display_name}" + ChatColor.GRAY + " display name");
         sender.sendMessage(ChatColor.YELLOW + "{player_uuid}" + ChatColor.GRAY + " UUID");
         sender.sendMessage(ChatColor.YELLOW + "{scene}" + ChatColor.GRAY + " id de la escena");
         sender.sendMessage(ChatColor.YELLOW + "{tick}" + ChatColor.GRAY + " tick actual de reproducción");
         sender.sendMessage(ChatColor.YELLOW + "{world} {x} {y} {z} {yaw} {pitch}" + ChatColor.GRAY + " ubicación actual");
+        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<cinematic>_<player>%" + ChatColor.GRAY + " true/false si ese jugador ya vio la cinemática");
     }
 
     private void handleFinish(CommandSender sender, String[] args) {
