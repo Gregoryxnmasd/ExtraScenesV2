@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Collections;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -75,6 +76,52 @@ public final class CinematicPlaybackService {
 
         Set<String> played = playedCinematics.get(playerId);
         return played != null && played.contains(normalizeId(cinematicId));
+    }
+
+    public int getPlayedCount(UUID playerId) {
+        if (playerId == null) {
+            return 0;
+        }
+
+        Set<String> played = playedCinematics.get(playerId);
+        return played == null ? 0 : played.size();
+    }
+
+    public Set<String> getPlayedSceneIds(UUID playerId) {
+        if (playerId == null) {
+            return Set.of();
+        }
+
+        Set<String> played = playedCinematics.get(playerId);
+        if (played == null || played.isEmpty()) {
+            return Set.of();
+        }
+
+        return Collections.unmodifiableSet(new HashSet<>(played));
+    }
+
+    public String getCurrentSceneId(UUID playerId) {
+        PlaybackState state = states.get(playerId);
+        if (state == null || !state.running) {
+            return "";
+        }
+        return state.cinematic.getId();
+    }
+
+    public int getCurrentTick(UUID playerId) {
+        PlaybackState state = states.get(playerId);
+        if (state == null || !state.running) {
+            return 0;
+        }
+        return Math.max(0, state.currentTick);
+    }
+
+    public int getCurrentEndTick(UUID playerId) {
+        PlaybackState state = states.get(playerId);
+        if (state == null || !state.running) {
+            return 0;
+        }
+        return Math.max(0, state.endTick);
     }
 
     public boolean stop(Player player) {
