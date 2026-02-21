@@ -9,7 +9,7 @@ depend: [PlaceholderAPI]
 commands:
   extrascenes:
     description: Scene system
-    usage: /extrascenes <create|edit|play|stop|record|key|tickcmd|placeholders|delete|list|show|reload>
+    usage: /extrascenes <create|edit|play|stop|record|actor|key|tickcmd|placeholders|delete|list|show|reload>
     aliases: [scenes]
     permission: extrascenes.use
 permissions:

@@ -63,7 +63,7 @@ public final class CinematicManager {
 
             ConfigurationSection endActionSection = scenesSection.getConfigurationSection(id + ".endAction");
             Cinematic.EndAction endAction = parseEndAction(endActionSection);
-            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction, tickCommands));
+            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction, tickCommands, parseActors(scenesSection.getConfigurationSection(id + ".actors"))));
         }
     }
 
@@ -94,6 +94,34 @@ public final class CinematicManager {
                 config.set(tickCommandPath + "." + entry.getKey(), entry.getValue());
             }
 
+            String actorsPath = "cinematics." + cinematic.getId() + ".actors";
+            config.set(actorsPath, null);
+            for (SceneActor actor : cinematic.getActors().values()) {
+                String actorPath = actorsPath + "." + actor.id();
+                config.set(actorPath + ".displayName", actor.displayName());
+                config.set(actorPath + ".scale", actor.scale());
+                config.set(actorPath + ".skin.texture", actor.skinTexture());
+                config.set(actorPath + ".skin.signature", actor.skinSignature());
+
+                List<Map<String, Object>> frameList = new ArrayList<>();
+                for (ActorFrame frame : actor.frames()) {
+                    Location frameLoc = frame.location();
+                    if (frameLoc == null || frameLoc.getWorld() == null) {
+                        continue;
+                    }
+                    Map<String, Object> serialized = new LinkedHashMap<>();
+                    serialized.put("tick", frame.tick());
+                    serialized.put("world", frameLoc.getWorld().getName());
+                    serialized.put("x", frameLoc.getX());
+                    serialized.put("y", frameLoc.getY());
+                    serialized.put("z", frameLoc.getZ());
+                    serialized.put("yaw", frameLoc.getYaw());
+                    serialized.put("pitch", frameLoc.getPitch());
+                    frameList.add(serialized);
+                }
+                config.set(actorPath + ".frames", frameList);
+            }
+
             String endActionPath = "cinematics." + cinematic.getId() + ".endAction";
             config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
             Location teleportLocation = cinematic.getEndAction().teleportLocation();
@@ -118,7 +146,7 @@ public final class CinematicManager {
         if (cinematics.containsKey(key)) {
             return false;
         }
-        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint(), Map.of()));
+        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint(), Map.of(), Map.of()));
         return true;
     }
 
@@ -140,7 +168,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -155,7 +183,7 @@ public final class CinematicManager {
         updated.removeIf(p -> p.tick() == tick);
         updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), interpolationMode));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -172,7 +200,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -201,7 +229,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -211,7 +239,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction(), cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -221,7 +249,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction, cinematic.getTickCommands()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction, cinematic.getTickCommands(), cinematic.getActors()));
         return true;
     }
 
@@ -241,7 +269,7 @@ public final class CinematicManager {
         List<String> commandsAtTick = new ArrayList<>(updated.getOrDefault(Math.max(0, tick), List.of()));
         commandsAtTick.add(normalizedCommand);
         updated.put(Math.max(0, tick), commandsAtTick);
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
         return true;
     }
 
@@ -266,7 +294,7 @@ public final class CinematicManager {
             updated.put(safeTick, commandsAtTick);
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
         return true;
     }
 
@@ -284,8 +312,97 @@ public final class CinematicManager {
             updated.remove(Math.max(0, tick));
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
         return true;
+    }
+
+    public boolean upsertActor(String sceneId, String actorId, String displayName, Double scale, String skinTexture, String skinSignature) {
+        String key = normalizeId(sceneId);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        Map<String, SceneActor> updatedActors = new LinkedHashMap<>(cinematic.getActors());
+        String actorKey = normalizeId(actorId);
+        SceneActor current = updatedActors.get(actorKey);
+        if (current == null) {
+            current = new SceneActor(actorId, displayName == null ? actorId : displayName, skinTexture, skinSignature,
+                    scale == null ? 1.0D : scale, List.of());
+        } else {
+            current = current.withProfile(displayName, skinTexture, skinSignature, scale);
+        }
+        updatedActors.put(actorKey, current);
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        return true;
+    }
+
+    public SceneActor getActor(String sceneId, String actorId) {
+        Cinematic cinematic = cinematics.get(normalizeId(sceneId));
+        if (cinematic == null) {
+            return null;
+        }
+        return cinematic.getActors().get(normalizeId(actorId));
+    }
+
+    public boolean saveActorFrames(String sceneId, String actorId, List<ActorFrame> frames) {
+        String key = normalizeId(sceneId);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        Map<String, SceneActor> updatedActors = new LinkedHashMap<>(cinematic.getActors());
+        String actorKey = normalizeId(actorId);
+        SceneActor actor = updatedActors.get(actorKey);
+        if (actor == null) {
+            return false;
+        }
+
+        updatedActors.put(actorKey, actor.withFrames(frames));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        return true;
+    }
+
+    private Map<String, SceneActor> parseActors(ConfigurationSection section) {
+        if (section == null) {
+            return Map.of();
+        }
+
+        Map<String, SceneActor> actors = new LinkedHashMap<>();
+        for (String actorId : section.getKeys(false)) {
+            ConfigurationSection actorSection = section.getConfigurationSection(actorId);
+            if (actorSection == null) {
+                continue;
+            }
+
+            String displayName = actorSection.getString("displayName", actorId);
+            double scale = actorSection.getDouble("scale", 1.0D);
+            String texture = actorSection.getString("skin.texture");
+            String signature = actorSection.getString("skin.signature");
+
+            List<ActorFrame> frames = new ArrayList<>();
+            for (Map<?, ?> frameMap : actorSection.getMapList("frames")) {
+                World world = Bukkit.getWorld(String.valueOf(frameMap.get("world")));
+                if (world == null) {
+                    continue;
+                }
+                Object tickValue = frameMap.containsKey("tick") ? frameMap.get("tick") : 0;
+                int tick = Math.max(0, (int) asDouble(tickValue));
+                Location loc = new Location(
+                        world,
+                        asDouble(frameMap.get("x")),
+                        asDouble(frameMap.get("y")),
+                        asDouble(frameMap.get("z")),
+                        (float) asDouble(frameMap.containsKey("yaw") ? frameMap.get("yaw") : 0),
+                        (float) asDouble(frameMap.containsKey("pitch") ? frameMap.get("pitch") : 0));
+                frames.add(new ActorFrame(tick, loc));
+            }
+
+            actors.put(normalizeId(actorId), new SceneActor(actorId, displayName, texture, signature, scale, frames));
+        }
+
+        return actors;
     }
 
     private Map<Integer, List<String>> parseTickCommands(ConfigurationSection section) {

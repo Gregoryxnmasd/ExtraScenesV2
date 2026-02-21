@@ -35,15 +35,17 @@ public final class CinematicPlaybackService {
     private final Map<UUID, PlaybackState> states = new HashMap<>();
     private final Map<UUID, Set<String>> playedCinematics = new HashMap<>();
     private final PlaceholderResolver placeholderResolver;
+    private final ActorPlaybackService actorPlaybackService;
     private static final double BEZIER_TENSION = 0.82;
 
     public CinematicPlaybackService(JavaPlugin plugin) {
-        this(plugin, new PlaceholderResolver());
+        this(plugin, new PlaceholderResolver(), new ActorPlaybackService(plugin));
     }
 
-    public CinematicPlaybackService(JavaPlugin plugin, PlaceholderResolver placeholderResolver) {
+    public CinematicPlaybackService(JavaPlugin plugin, PlaceholderResolver placeholderResolver, ActorPlaybackService actorPlaybackService) {
         this.plugin = plugin;
         this.placeholderResolver = placeholderResolver;
+        this.actorPlaybackService = actorPlaybackService;
     }
 
     public boolean isInCinematic(Player player) {
@@ -66,6 +68,7 @@ public final class CinematicPlaybackService {
         PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, fullPlayback, player.getLocation(), player.getGameMode());
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
+        actorPlaybackService.start(player, state.cinematic, state.currentTick);
         return true;
     }
 
@@ -133,6 +136,7 @@ public final class CinematicPlaybackService {
         cancelTask(state);
         clearFakeHelmet(player);
         restoreGameMode(player, state);
+        actorPlaybackService.cleanup(player);
         return true;
     }
 
@@ -145,6 +149,7 @@ public final class CinematicPlaybackService {
                 if (player != null && player.isOnline()) {
                     clearFakeHelmet(player);
                     restoreGameMode(player, state);
+                    actorPlaybackService.cleanup(player);
                 }
             }
         }
@@ -160,6 +165,7 @@ public final class CinematicPlaybackService {
         state.running = false;
         clearFakeHelmet(player);
         restoreGameMode(player, state);
+        actorPlaybackService.cleanup(player);
     }
 
     public void handleJoin(Player player) {
@@ -169,6 +175,7 @@ public final class CinematicPlaybackService {
         }
 
         startRunning(player, state);
+        actorPlaybackService.start(player, state.cinematic, state.currentTick);
     }
 
     private void startRunning(Player player, PlaybackState state) {
@@ -203,6 +210,7 @@ public final class CinematicPlaybackService {
 
             player.teleport(destination);
             runTickCommands(player, state);
+            actorPlaybackService.tick(player, state.cinematic, state.currentTick);
             state.currentTick++;
         } catch (Exception ex) {
             plugin.getLogger().severe("Scene error for " + player.getName() + ": " + ex.getMessage());

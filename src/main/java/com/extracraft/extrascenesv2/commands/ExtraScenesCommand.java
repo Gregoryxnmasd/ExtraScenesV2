@@ -4,6 +4,9 @@ import com.extracraft.extrascenesv2.cinematics.Cinematic;
 import com.extracraft.extrascenesv2.cinematics.CinematicManager;
 import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import com.extracraft.extrascenesv2.cinematics.CinematicPoint;
+import com.extracraft.extrascenesv2.cinematics.SceneActor;
+import com.extracraft.extrascenesv2.cinematics.ActorFrame;
+import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -12,6 +15,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.title.Title;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -26,17 +34,20 @@ import org.bukkit.scheduler.BukkitTask;
 
 public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
 
     private final JavaPlugin plugin;
     private final CinematicManager manager;
     private final CinematicPlaybackService playbackService;
     private final Map<UUID, RecordingState> recordings = new HashMap<>();
+    private final Map<UUID, ActorRecordingState> actorRecordings = new HashMap<>();
+    private final ActorPlaybackService actorPreviewService;
 
     public ExtraScenesCommand(JavaPlugin plugin, CinematicManager manager, CinematicPlaybackService playbackService) {
         this.plugin = plugin;
         this.manager = manager;
         this.playbackService = playbackService;
+        this.actorPreviewService = new ActorPlaybackService(plugin);
     }
 
     @Override
@@ -52,6 +63,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "play" -> handlePlay(sender, args);
             case "stop" -> handleStop(sender, args);
             case "record" -> handleRecord(sender, args);
+            case "actor" -> handleActor(sender, args);
             case "key" -> handleKey(sender, args);
             case "finish" -> handleFinish(sender, args);
             case "tickcmd" -> handleTickCommand(sender, args);
@@ -273,6 +285,169 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         manager.save();
         sender.sendMessage(ChatColor.GREEN + "Keyframes removed for " + args[3] + ".");
+    }
+
+    private void handleActor(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|record>");
+            return;
+        }
+
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "create" -> handleActorCreate(sender, args);
+            case "skin" -> handleActorSkin(sender, args);
+            case "record" -> handleActorRecord(sender, args);
+            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|record>");
+        }
+    }
+
+    private void handleActorCreate(CommandSender sender, String[] args) {
+        if (args.length < 5) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor create <scene> <actorId> <name> [scale]");
+            return;
+        }
+
+        Double scale = 1.0D;
+        if (args.length >= 6) {
+            try {
+                scale = Double.parseDouble(args[5]);
+            } catch (NumberFormatException ex) {
+                sender.sendMessage(ChatColor.RED + "Escala inválida.");
+                return;
+            }
+        }
+
+        if (!manager.upsertActor(args[2], args[3], ChatColor.translateAlternateColorCodes('&', args[4]), scale, null, null)) {
+            sender.sendMessage(ChatColor.RED + "No existe esa escena.");
+            return;
+        }
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Actor guardado.");
+    }
+
+    private void handleActorSkin(CommandSender sender, String[] args) {
+        if (args.length < 6) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> <texture> <signature>");
+            return;
+        }
+
+        SceneActor actor = manager.getActor(args[2], args[3]);
+        if (actor == null) {
+            sender.sendMessage(ChatColor.RED + "Actor no existe. Créalo primero.");
+            return;
+        }
+
+        if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), args[4], args[5])) {
+            sender.sendMessage(ChatColor.RED + "No se pudo actualizar skin.");
+            return;
+        }
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
+    }
+
+    private void handleActorRecord(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(ChatColor.RED + "Solo jugadores.");
+            return;
+        }
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor record <start|stop>");
+            return;
+        }
+        if (args[2].equalsIgnoreCase("stop")) {
+            saveActorRecording(player);
+            return;
+        }
+        if (!args[2].equalsIgnoreCase("start") || args.length < 5) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor record start <scene> <actorId> [duration]");
+            return;
+        }
+
+        SceneActor actor = manager.getActor(args[3], args[4]);
+        if (actor == null) {
+            player.sendMessage(ChatColor.RED + "Actor o escena inválidos.");
+            return;
+        }
+
+        Integer duration = args.length >= 6 ? parseDurationTicks(args[5]) : null;
+        if (args.length >= 6 && duration == null) {
+            player.sendMessage(ChatColor.RED + "Duración inválida.");
+            return;
+        }
+
+        stopActorRecording(player.getUniqueId());
+        ActorRecordingState state = new ActorRecordingState(args[3], args[4], duration == null ? manager.getCinematic(args[3]).map(Cinematic::getDurationTicks).orElse(200) : duration);
+        actorRecordings.put(player.getUniqueId(), state);
+        giveSaveRecorderItem(player);
+        manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0));
+
+        player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "3")));
+        Bukkit.getScheduler().runTaskLater(plugin, () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "2"))), 20L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "1"))), 40L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> startActorRecordingTask(player, state), 60L);
+    }
+
+    private void startActorRecordingTask(Player player, ActorRecordingState state) {
+        state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            Player online = Bukkit.getPlayer(player.getUniqueId());
+            if (online == null || !online.isOnline()) {
+                stopActorRecording(player.getUniqueId());
+                return;
+            }
+            if (state.tick > state.maxTicks) {
+                saveActorRecording(online);
+                return;
+            }
+            state.frames.add(new ActorFrame(state.tick, online.getLocation()));
+            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick));
+            online.sendActionBar(Component.text(ChatColor.AQUA + "Recording actor " + state.actorId + ChatColor.GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
+            state.tick++;
+        }, 0L, 1L);
+    }
+
+    public boolean isActorSaveItem(ItemStack item) {
+        if (item == null || item.getType() != Material.LIME_DYE) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && meta.hasDisplayName() && meta.getDisplayName().contains("Guardar recording actor");
+    }
+
+    public void saveActorRecording(Player player) {
+        ActorRecordingState state = actorRecordings.get(player.getUniqueId());
+        if (state == null) {
+            player.sendMessage(ChatColor.RED + "No estás grabando un actor.");
+            return;
+        }
+        manager.saveActorFrames(state.sceneId, state.actorId, state.frames);
+        manager.save();
+        stopActorRecording(player.getUniqueId());
+        player.sendMessage(ChatColor.GREEN + "Recording guardado para actor " + state.actorId + ".");
+    }
+
+    public void stopActorRecording(UUID playerId) {
+        ActorRecordingState state = actorRecordings.remove(playerId);
+        if (state == null) {
+            return;
+        }
+        if (state.task != null) {
+            state.task.cancel();
+        }
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null) {
+            player.getInventory().remove(Material.LIME_DYE);
+            actorPreviewService.cleanup(player);
+        }
+    }
+
+    private void giveSaveRecorderItem(Player player) {
+        ItemStack item = new ItemStack(Material.LIME_DYE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GREEN + "Guardar recording actor");
+            item.setItemMeta(meta);
+        }
+        player.getInventory().setItem(8, item);
     }
 
     private void handleKey(CommandSender sender, String[] args) {
@@ -754,6 +929,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> <name> [scale]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <texture> <signature>");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
@@ -846,6 +1025,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2 && args[0].equalsIgnoreCase("record")) {
             return List.of("start", "stop", "clear");
         }
+        if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
+            return List.of("create", "skin", "record");
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record")) {
+            return List.of("start", "stop");
+        }
+
+        if (args.length >= 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin").contains(args[1].toLowerCase(Locale.ROOT))) {
+            return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
+        }
+
 
         if (args.length == 3 && Arrays.asList("play", "edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Collections.emptyList();
@@ -908,6 +1099,21 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         return new ArrayList<>();
+    }
+
+    private static final class ActorRecordingState {
+        private final String sceneId;
+        private final String actorId;
+        private final int maxTicks;
+        private final List<ActorFrame> frames = new ArrayList<>();
+        private int tick;
+        private BukkitTask task;
+
+        private ActorRecordingState(String sceneId, String actorId, int maxTicks) {
+            this.sceneId = sceneId;
+            this.actorId = actorId;
+            this.maxTicks = Math.max(1, maxTicks);
+        }
     }
 
     private static final class RecordingState {

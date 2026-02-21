@@ -3,6 +3,7 @@ package com.extracraft.extrascenesv2;
 import com.extracraft.extrascenesv2.cinematics.CinematicManager;
 import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import com.extracraft.extrascenesv2.commands.ExtraScenesCommand;
+import com.extracraft.extrascenesv2.listeners.ActorRecordingListener;
 import com.extracraft.extrascenesv2.listeners.CinematicProtectionListener;
 import com.extracraft.extrascenesv2.placeholders.ScenesPlaceholderExpansion;
 import org.bukkit.command.PluginCommand;
@@ -54,5 +55,6 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         ExtraScenesCommand executor = new ExtraScenesCommand(this, cinematicManager, playbackService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
+        getServer().getPluginManager().registerEvents(new ActorRecordingListener(executor), this);
     }
 }
