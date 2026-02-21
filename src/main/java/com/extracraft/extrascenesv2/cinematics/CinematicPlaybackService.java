@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.EquipmentSlotGroup;
@@ -246,12 +247,47 @@ public final class CinematicPlaybackService {
     }
 
     private void applyFakePumpkin(Player player) {
+        applyMovementSpeedPenalty(player);
         player.sendEquipmentChange(player, EquipmentSlot.HEAD, createFakePumpkin());
     }
 
     private void clearFakeHelmet(Player player) {
+        removeMovementSpeedPenalty(player);
         ItemStack realHelmet = player.getInventory().getHelmet();
         player.sendEquipmentChange(player, EquipmentSlot.HEAD, realHelmet);
+    }
+
+    private void applyMovementSpeedPenalty(Player player) {
+        if (PUMPKIN_SPEED_PENALTY_KEY == null) {
+            return;
+        }
+
+        AttributeInstance movementSpeed = player.getAttribute(Attribute.MOVEMENT_SPEED);
+        if (movementSpeed == null) {
+            return;
+        }
+
+        if (movementSpeed.getModifier(PUMPKIN_SPEED_PENALTY_KEY) != null) {
+            return;
+        }
+
+        movementSpeed.addTransientModifier(new AttributeModifier(
+                PUMPKIN_SPEED_PENALTY_KEY,
+                -10.0,
+                AttributeModifier.Operation.ADD_NUMBER));
+    }
+
+    private void removeMovementSpeedPenalty(Player player) {
+        if (PUMPKIN_SPEED_PENALTY_KEY == null) {
+            return;
+        }
+
+        AttributeInstance movementSpeed = player.getAttribute(Attribute.MOVEMENT_SPEED);
+        if (movementSpeed == null) {
+            return;
+        }
+
+        movementSpeed.removeModifier(PUMPKIN_SPEED_PENALTY_KEY);
     }
 
     private ItemStack createFakePumpkin() {
