@@ -61,7 +61,8 @@ public final class CinematicPlaybackService {
 
         stop(player);
 
-        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, player.getLocation(), player.getGameMode());
+        boolean fullPlayback = safeStart == 0 && safeEnd >= maxEnd;
+        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, fullPlayback, player.getLocation(), player.getGameMode());
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
         return true;
@@ -179,7 +180,9 @@ public final class CinematicPlaybackService {
     }
 
     private void finishPlayback(Player player, PlaybackState state) {
-        markAsPlayed(player.getUniqueId(), state.cinematic.getId());
+        if (state.fullPlayback) {
+            markAsPlayed(player.getUniqueId(), state.cinematic.getId());
+        }
 
         Cinematic.EndAction endAction = state.cinematic.getEndAction();
         if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
@@ -383,6 +386,7 @@ public final class CinematicPlaybackService {
     private static final class PlaybackState {
         private final Cinematic cinematic;
         private final int endTick;
+        private final boolean fullPlayback;
         private final Location startLocation;
         private final GameMode originalGameMode;
         private int currentTick;
@@ -390,10 +394,11 @@ public final class CinematicPlaybackService {
         private boolean changedGameMode;
         private BukkitTask task;
 
-        private PlaybackState(Cinematic cinematic, int startTick, int endTick, Location startLocation, GameMode originalGameMode) {
+        private PlaybackState(Cinematic cinematic, int startTick, int endTick, boolean fullPlayback, Location startLocation, GameMode originalGameMode) {
             this.cinematic = cinematic;
             this.currentTick = startTick;
             this.endTick = endTick;
+            this.fullPlayback = fullPlayback;
             this.startLocation = startLocation == null ? null : startLocation.clone();
             this.originalGameMode = originalGameMode;
         }
