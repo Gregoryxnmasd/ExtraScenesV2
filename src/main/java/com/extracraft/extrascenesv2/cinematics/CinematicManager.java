@@ -102,6 +102,8 @@ public final class CinematicManager {
                 config.set(actorPath + ".scale", actor.scale());
                 config.set(actorPath + ".skin.texture", actor.skinTexture());
                 config.set(actorPath + ".skin.signature", actor.skinSignature());
+                config.set(actorPath + ".appearAtTick", actor.appearAtTick());
+                config.set(actorPath + ".disappearAtTick", actor.disappearAtTick());
 
                 List<Map<String, Object>> frameList = new ArrayList<>();
                 for (ActorFrame frame : actor.frames()) {
@@ -328,9 +330,9 @@ public final class CinematicManager {
         SceneActor current = updatedActors.get(actorKey);
         if (current == null) {
             current = new SceneActor(actorId, displayName == null ? actorId : displayName, skinTexture, skinSignature,
-                    scale == null ? 1.0D : scale, List.of());
+                    scale == null ? 1.0D : scale, 0, cinematic.getDurationTicks(), List.of());
         } else {
-            current = current.withProfile(displayName, skinTexture, skinSignature, scale);
+            current = current.withProfile(displayName, skinTexture, skinSignature, scale, null, null);
         }
         updatedActors.put(actorKey, current);
         cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
@@ -364,6 +366,26 @@ public final class CinematicManager {
         return true;
     }
 
+
+    public boolean setActorWindow(String sceneId, String actorId, int appearAtTick, int disappearAtTick) {
+        String key = normalizeId(sceneId);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        Map<String, SceneActor> updatedActors = new LinkedHashMap<>(cinematic.getActors());
+        String actorKey = normalizeId(actorId);
+        SceneActor actor = updatedActors.get(actorKey);
+        if (actor == null) {
+            return false;
+        }
+
+        updatedActors.put(actorKey, actor.withProfile(null, null, null, null, appearAtTick, disappearAtTick));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        return true;
+    }
+
     private Map<String, SceneActor> parseActors(ConfigurationSection section) {
         if (section == null) {
             return Map.of();
@@ -378,6 +400,8 @@ public final class CinematicManager {
 
             String displayName = actorSection.getString("displayName", actorId);
             double scale = actorSection.getDouble("scale", 1.0D);
+            int appearAt = Math.max(0, actorSection.getInt("appearAtTick", 0));
+            int disappearAt = Math.max(appearAt, actorSection.getInt("disappearAtTick", Integer.MAX_VALUE));
             String texture = actorSection.getString("skin.texture");
             String signature = actorSection.getString("skin.signature");
 
@@ -399,7 +423,7 @@ public final class CinematicManager {
                 frames.add(new ActorFrame(tick, loc));
             }
 
-            actors.put(normalizeId(actorId), new SceneActor(actorId, displayName, texture, signature, scale, frames));
+            actors.put(normalizeId(actorId), new SceneActor(actorId, displayName, texture, signature, scale, appearAt, disappearAt, frames));
         }
 
         return actors;

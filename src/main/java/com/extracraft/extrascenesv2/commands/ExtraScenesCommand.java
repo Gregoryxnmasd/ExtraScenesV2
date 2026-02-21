@@ -289,15 +289,16 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActor(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|record>");
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|window|record>");
             return;
         }
 
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "create" -> handleActorCreate(sender, args);
             case "skin" -> handleActorSkin(sender, args);
+            case "window" -> handleActorWindow(sender, args);
             case "record" -> handleActorRecord(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|record>");
+            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|window|record>");
         }
     }
 
@@ -345,6 +346,32 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
     }
 
+
+    private void handleActorWindow(CommandSender sender, String[] args) {
+        if (args.length < 6) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
+            return;
+        }
+
+        int appearTick;
+        int disappearTick;
+        try {
+            appearTick = Math.max(0, Integer.parseInt(args[4]));
+            disappearTick = Math.max(appearTick, Integer.parseInt(args[5]));
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(ChatColor.RED + "Ticks inválidos.");
+            return;
+        }
+
+        if (!manager.setActorWindow(args[2], args[3], appearTick, disappearTick)) {
+            sender.sendMessage(ChatColor.RED + "Actor o escena inválidos.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Ventana del actor actualizada: " + appearTick + " -> " + disappearTick + ".");
+    }
+
     private void handleActorRecord(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(ChatColor.RED + "Solo jugadores.");
@@ -379,7 +406,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         ActorRecordingState state = new ActorRecordingState(args[3], args[4], duration == null ? manager.getCinematic(args[3]).map(Cinematic::getDurationTicks).orElse(200) : duration);
         actorRecordings.put(player.getUniqueId(), state);
         giveSaveRecorderItem(player);
-        manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0));
+        manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0, state.actorId));
 
         player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "3")));
         Bukkit.getScheduler().runTaskLater(plugin, () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "2"))), 20L);
@@ -399,7 +426,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation()));
-            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick));
+            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
             online.sendActionBar(Component.text(ChatColor.AQUA + "Recording actor " + state.actorId + ChatColor.GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
         }, 0L, 1L);
@@ -419,7 +446,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(ChatColor.RED + "No estás grabando un actor.");
             return;
         }
-        manager.saveActorFrames(state.sceneId, state.actorId, state.frames);
+        if (!manager.saveActorFrames(state.sceneId, state.actorId, state.frames)) {
+            player.sendMessage(ChatColor.RED + "No se pudo guardar el recording del actor.");
+            return;
+        }
         manager.save();
         stopActorRecording(player.getUniqueId());
         player.sendMessage(ChatColor.GREEN + "Recording guardado para actor " + state.actorId + ".");
@@ -931,6 +961,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> <name> [scale]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <texture> <signature>");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
@@ -1026,14 +1057,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("start", "stop", "clear");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
-            return List.of("create", "skin", "record");
+            return List.of("create", "skin", "window", "record");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record")) {
             return List.of("start", "stop");
         }
 
-        if (args.length >= 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin").contains(args[1].toLowerCase(Locale.ROOT))) {
+        if (args.length >= 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
 

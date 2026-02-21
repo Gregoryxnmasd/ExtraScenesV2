@@ -5,6 +5,7 @@ import com.destroystokyo.paper.profile.ProfileProperty;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
@@ -30,30 +31,50 @@ public final class ActorPlaybackService {
     }
 
     public void start(Player viewer, Cinematic cinematic, int tick) {
+        start(viewer, cinematic, tick, null);
+    }
+
+    public void start(Player viewer, Cinematic cinematic, int tick, String excludedActorId) {
         cleanup(viewer);
         Map<String, UUID> entities = new LinkedHashMap<>();
         for (SceneActor actor : cinematic.getActors().values()) {
+            if (isExcluded(actor, excludedActorId) || !actor.isVisibleAtTick(tick)) {
+                continue;
+            }
             ArmorStand stand = spawnActor(viewer, actor, sample(actor.frames(), tick));
             if (stand != null) {
-                entities.put(actor.id().toLowerCase(), stand.getUniqueId());
+                entities.put(key(actor.id()), stand.getUniqueId());
             }
         }
         spawned.put(viewer.getUniqueId(), entities);
     }
 
     public void tick(Player viewer, Cinematic cinematic, int tick) {
-        Map<String, UUID> entities = spawned.get(viewer.getUniqueId());
-        if (entities == null) {
-            return;
-        }
+        tick(viewer, cinematic, tick, null);
+    }
+
+    public void tick(Player viewer, Cinematic cinematic, int tick, String excludedActorId) {
+        Map<String, UUID> entities = spawned.computeIfAbsent(viewer.getUniqueId(), ignored -> new LinkedHashMap<>());
         for (SceneActor actor : cinematic.getActors().values()) {
-            UUID entityId = entities.get(actor.id().toLowerCase());
-            Location next = sample(actor.frames(), tick);
-            if (entityId == null || next == null) {
+            String actorKey = key(actor.id());
+            if (isExcluded(actor, excludedActorId) || !actor.isVisibleAtTick(tick)) {
+                despawn(entities.remove(actorKey));
                 continue;
             }
-            Entity entity = Bukkit.getEntity(entityId);
+
+            Location next = sample(actor.frames(), tick);
+            if (next == null || next.getWorld() == null) {
+                despawn(entities.remove(actorKey));
+                continue;
+            }
+
+            UUID entityId = entities.get(actorKey);
+            Entity entity = entityId == null ? null : Bukkit.getEntity(entityId);
             if (!(entity instanceof ArmorStand stand) || !stand.isValid()) {
+                ArmorStand created = spawnActor(viewer, actor, next);
+                if (created != null) {
+                    entities.put(actorKey, created.getUniqueId());
+                }
                 continue;
             }
             stand.teleport(next);
@@ -66,10 +87,7 @@ public final class ActorPlaybackService {
             return;
         }
         for (UUID entityId : entities.values()) {
-            Entity entity = Bukkit.getEntity(entityId);
-            if (entity != null) {
-                entity.remove();
-            }
+            despawn(entityId);
         }
     }
 
@@ -83,14 +101,16 @@ public final class ActorPlaybackService {
         stand.setAI(false);
         stand.setCanTick(false);
         stand.setCustomNameVisible(false);
+        stand.customName(null);
         stand.setVisible(true);
+        stand.setMarker(false);
 
         AttributeInstance scaleAttribute = stand.getAttribute(Attribute.SCALE);
         if (scaleAttribute != null) {
             scaleAttribute.setBaseValue(actor.scale());
         }
 
-        if (actor.skinTexture() != null && actor.skinSignature() != null) {
+        if (actor.skinTexture() != null && actor.skinSignature() != null && stand.getEquipment() != null) {
             stand.getEquipment().setHelmet(createSkull(actor));
         }
 
@@ -116,13 +136,57 @@ public final class ActorPlaybackService {
     }
 
     private Location sample(List<ActorFrame> frames, int tick) {
-        Location result = null;
+        ActorFrame prev = null;
+        ActorFrame next = null;
         for (ActorFrame frame : frames) {
-            if (frame.tick() > tick) {
-                break;
+            if (frame.tick() <= tick) {
+                prev = frame;
+                continue;
             }
-            result = frame.location();
+            next = frame;
+            break;
         }
-        return result == null ? null : result.clone();
+
+        if (prev == null && next == null) {
+            return null;
+        }
+        if (prev == null) {
+            return next.location();
+        }
+        if (next == null) {
+            return prev.location();
+        }
+
+        Location a = prev.location();
+        Location b = next.location();
+        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null || !a.getWorld().equals(b.getWorld())) {
+            return a;
+        }
+
+        double t = (tick - prev.tick()) / (double) Math.max(1, next.tick() - prev.tick());
+        double x = a.getX() + (b.getX() - a.getX()) * t;
+        double y = a.getY() + (b.getY() - a.getY()) * t;
+        double z = a.getZ() + (b.getZ() - a.getZ()) * t;
+        float yaw = (float) (a.getYaw() + (b.getYaw() - a.getYaw()) * t);
+        float pitch = (float) (a.getPitch() + (b.getPitch() - a.getPitch()) * t);
+        return new Location(a.getWorld(), x, y, z, yaw, pitch);
+    }
+
+    private void despawn(UUID entityId) {
+        if (entityId == null) {
+            return;
+        }
+        Entity entity = Bukkit.getEntity(entityId);
+        if (entity != null) {
+            entity.remove();
+        }
+    }
+
+    private boolean isExcluded(SceneActor actor, String excludedActorId) {
+        return excludedActorId != null && key(actor.id()).equals(key(excludedActorId));
+    }
+
+    private String key(String value) {
+        return value.toLowerCase(Locale.ROOT);
     }
 }
