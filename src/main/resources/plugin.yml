@@ -8,7 +8,7 @@ folia-supported: true
 depend: [PlaceholderAPI]
 commands:
   extrascenes:
-    description: Sistema de escenas
+    description: Scene system
     usage: /extrascenes <create|edit|play|stop|record|key|tickcmd|placeholders|delete|list|show|reload>
     aliases: [scenes]
     permission: extrascenes.use
