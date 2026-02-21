@@ -2,7 +2,9 @@ package com.extracraft.extrascenesv2.cinematics;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.bukkit.Location;
 
 public final class Cinematic {
@@ -11,16 +13,23 @@ public final class Cinematic {
     private final int durationTicks;
     private final List<CinematicPoint> points;
     private final EndAction endAction;
+    private final Map<Integer, List<String>> tickCommands;
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points) {
-        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint());
+        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction) {
+        this(id, durationTicks, points, endAction, Map.of());
+    }
+
+    public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
+                     Map<Integer, List<String>> tickCommands) {
         this.id = id;
         this.durationTicks = Math.max(1, durationTicks);
         this.points = new ArrayList<>(points);
         this.endAction = endAction == null ? EndAction.stayAtLastCameraPoint() : endAction;
+        this.tickCommands = deepCopyTickCommands(tickCommands);
     }
 
     public String getId() {
@@ -41,6 +50,31 @@ public final class Cinematic {
 
     public EndAction getEndAction() {
         return endAction;
+    }
+
+    public Map<Integer, List<String>> getTickCommands() {
+        return tickCommands;
+    }
+
+    private Map<Integer, List<String>> deepCopyTickCommands(Map<Integer, List<String>> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Integer, List<String>> copy = new LinkedHashMap<>();
+        for (Map.Entry<Integer, List<String>> entry : source.entrySet()) {
+            int tick = Math.max(0, entry.getKey());
+            List<String> commands = entry.getValue() == null ? List.of() : entry.getValue().stream()
+                    .filter(command -> command != null && !command.isBlank())
+                    .map(String::trim)
+                    .toList();
+            if (commands.isEmpty()) {
+                continue;
+            }
+            copy.put(tick, List.copyOf(commands));
+        }
+
+        return Collections.unmodifiableMap(copy);
     }
 
     public enum EndActionType {

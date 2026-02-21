@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -57,9 +58,12 @@ public final class CinematicManager {
 
             points.sort(Comparator.comparingInt(CinematicPoint::tick));
 
+            Map<Integer, List<String>> tickCommands = parseTickCommands(
+                    scenesSection.getConfigurationSection(id + ".tickCommands"));
+
             ConfigurationSection endActionSection = scenesSection.getConfigurationSection(id + ".endAction");
             Cinematic.EndAction endAction = parseEndAction(endActionSection);
-            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction));
+            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction, tickCommands));
         }
     }
 
@@ -84,6 +88,11 @@ public final class CinematicManager {
             }
             config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
             config.set("cinematics." + cinematic.getId() + ".points", serializedPoints);
+            String tickCommandPath = "cinematics." + cinematic.getId() + ".tickCommands";
+            config.set(tickCommandPath, null);
+            for (Map.Entry<Integer, List<String>> entry : cinematic.getTickCommands().entrySet()) {
+                config.set(tickCommandPath + "." + entry.getKey(), entry.getValue());
+            }
 
             String endActionPath = "cinematics." + cinematic.getId() + ".endAction";
             config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
@@ -109,7 +118,7 @@ public final class CinematicManager {
         if (cinematics.containsKey(key)) {
             return false;
         }
-        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint()));
+        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint(), Map.of()));
         return true;
     }
 
@@ -131,7 +140,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands()));
         return true;
     }
 
@@ -146,7 +155,7 @@ public final class CinematicManager {
         updated.removeIf(p -> p.tick() == tick);
         updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), interpolationMode));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
         return true;
     }
 
@@ -163,7 +172,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
         return true;
     }
 
@@ -192,7 +201,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands()));
         return true;
     }
 
@@ -202,7 +211,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction(), cinematic.getTickCommands()));
         return true;
     }
 
@@ -212,8 +221,98 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction, cinematic.getTickCommands()));
         return true;
+    }
+
+    public boolean addTickCommand(String id, int tick, String command) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        String normalizedCommand = command == null ? "" : command.trim();
+        if (normalizedCommand.isEmpty()) {
+            return false;
+        }
+
+        Map<Integer, List<String>> updated = new TreeMap<>(cinematic.getTickCommands());
+        List<String> commandsAtTick = new ArrayList<>(updated.getOrDefault(Math.max(0, tick), List.of()));
+        commandsAtTick.add(normalizedCommand);
+        updated.put(Math.max(0, tick), commandsAtTick);
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        return true;
+    }
+
+    public boolean removeTickCommand(String id, int tick, int index) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        int safeTick = Math.max(0, tick);
+        Map<Integer, List<String>> updated = new TreeMap<>(cinematic.getTickCommands());
+        List<String> commandsAtTick = new ArrayList<>(updated.getOrDefault(safeTick, List.of()));
+        if (index < 1 || index > commandsAtTick.size()) {
+            return false;
+        }
+
+        commandsAtTick.remove(index - 1);
+        if (commandsAtTick.isEmpty()) {
+            updated.remove(safeTick);
+        } else {
+            updated.put(safeTick, commandsAtTick);
+        }
+
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        return true;
+    }
+
+    public boolean clearTickCommands(String id, Integer tick) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        Map<Integer, List<String>> updated = new TreeMap<>(cinematic.getTickCommands());
+        if (tick == null) {
+            updated.clear();
+        } else {
+            updated.remove(Math.max(0, tick));
+        }
+
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated));
+        return true;
+    }
+
+    private Map<Integer, List<String>> parseTickCommands(ConfigurationSection section) {
+        if (section == null) {
+            return Map.of();
+        }
+
+        Map<Integer, List<String>> commands = new TreeMap<>();
+        for (String tickKey : section.getKeys(false)) {
+            int tick;
+            try {
+                tick = Math.max(0, Integer.parseInt(tickKey));
+            } catch (NumberFormatException ex) {
+                continue;
+            }
+
+            List<String> values = section.getStringList(tickKey).stream()
+                    .map(String::trim)
+                    .filter(command -> !command.isBlank())
+                    .toList();
+            if (values.isEmpty()) {
+                continue;
+            }
+            commands.put(tick, values);
+        }
+
+        return commands;
     }
 
     private static Cinematic.EndAction parseEndAction(ConfigurationSection section) {

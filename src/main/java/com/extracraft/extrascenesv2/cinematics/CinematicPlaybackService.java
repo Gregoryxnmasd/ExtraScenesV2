@@ -1,22 +1,24 @@
 package com.extracraft.extrascenesv2.cinematics;
 
+import com.extracraft.extrascenesv2.placeholders.PlaceholderResolver;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -27,10 +29,16 @@ public final class CinematicPlaybackService {
 
     private final JavaPlugin plugin;
     private final Map<UUID, PlaybackState> states = new HashMap<>();
+    private final PlaceholderResolver placeholderResolver;
     private static final double BEZIER_TENSION = 0.82;
 
     public CinematicPlaybackService(JavaPlugin plugin) {
+        this(plugin, new PlaceholderResolver());
+    }
+
+    public CinematicPlaybackService(JavaPlugin plugin, PlaceholderResolver placeholderResolver) {
         this.plugin = plugin;
+        this.placeholderResolver = placeholderResolver;
     }
 
     public boolean isInCinematic(Player player) {
@@ -49,7 +57,7 @@ public final class CinematicPlaybackService {
 
         stop(player);
 
-        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, player.getLocation());
+        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, player.getLocation(), player.getGameMode());
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
         return true;
@@ -63,6 +71,7 @@ public final class CinematicPlaybackService {
 
         cancelTask(state);
         clearFakeHelmet(player);
+        restoreGameMode(player, state);
         return true;
     }
 
@@ -74,6 +83,7 @@ public final class CinematicPlaybackService {
                 Player player = Bukkit.getPlayer(playerId);
                 if (player != null && player.isOnline()) {
                     clearFakeHelmet(player);
+                    restoreGameMode(player, state);
                 }
             }
         }
@@ -88,6 +98,7 @@ public final class CinematicPlaybackService {
         cancelTask(state);
         state.running = false;
         clearFakeHelmet(player);
+        restoreGameMode(player, state);
     }
 
     public void handleJoin(Player player) {
@@ -101,6 +112,7 @@ public final class CinematicPlaybackService {
 
     private void startRunning(Player player, PlaybackState state) {
         applyFakePumpkin(player);
+        applySpectatorMode(player, state);
         state.running = true;
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> tick(player), 0L, 1L);
     }
@@ -129,6 +141,7 @@ public final class CinematicPlaybackService {
             }
 
             player.teleport(destination);
+            runTickCommands(player, state);
             state.currentTick++;
         } catch (Exception ex) {
             plugin.getLogger().severe("Error en escena para " + player.getName() + ": " + ex.getMessage());
@@ -136,6 +149,21 @@ public final class CinematicPlaybackService {
         }
     }
 
+    private void runTickCommands(Player player, PlaybackState state) {
+        List<String> commands = state.cinematic.getTickCommands().get(state.currentTick);
+        if (commands == null || commands.isEmpty()) {
+            return;
+        }
+
+        for (String rawCommand : commands) {
+            String command = placeholderResolver.apply(rawCommand, player, state.cinematic, state.currentTick);
+            if (command.isBlank()) {
+                continue;
+            }
+            String normalized = command.startsWith("/") ? command.substring(1) : command;
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), normalized);
+        }
+    }
 
     private void finishPlayback(Player player, PlaybackState state) {
         Cinematic.EndAction endAction = state.cinematic.getEndAction();
@@ -151,6 +179,21 @@ public final class CinematicPlaybackService {
         }
 
         stop(player);
+    }
+
+    private void applySpectatorMode(Player player, PlaybackState state) {
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+        state.changedGameMode = true;
+        player.setGameMode(GameMode.SPECTATOR);
+    }
+
+    private void restoreGameMode(Player player, PlaybackState state) {
+        if (!state.changedGameMode || state.originalGameMode == null) {
+            return;
+        }
+        player.setGameMode(state.originalGameMode);
     }
 
     private Location interpolateLocation(Cinematic cinematic, int tick) {
@@ -311,16 +354,19 @@ public final class CinematicPlaybackService {
     private static final class PlaybackState {
         private final Cinematic cinematic;
         private final int endTick;
+        private final Location startLocation;
+        private final GameMode originalGameMode;
         private int currentTick;
         private boolean running;
+        private boolean changedGameMode;
         private BukkitTask task;
-        private final Location startLocation;
 
-        private PlaybackState(Cinematic cinematic, int startTick, int endTick, Location startLocation) {
+        private PlaybackState(Cinematic cinematic, int startTick, int endTick, Location startLocation, GameMode originalGameMode) {
             this.cinematic = cinematic;
             this.currentTick = startTick;
             this.endTick = endTick;
             this.startLocation = startLocation == null ? null : startLocation.clone();
+            this.originalGameMode = originalGameMode;
         }
     }
 }
