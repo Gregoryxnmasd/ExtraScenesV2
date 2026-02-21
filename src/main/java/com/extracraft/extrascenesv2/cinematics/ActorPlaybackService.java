@@ -15,7 +15,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -95,24 +94,25 @@ public final class ActorPlaybackService {
         if (initial == null || initial.getWorld() == null) {
             return null;
         }
-        ArmorStand stand = (ArmorStand) initial.getWorld().spawnEntity(initial, EntityType.ARMOR_STAND);
-        stand.setGravity(false);
-        stand.setInvulnerable(true);
-        stand.setAI(false);
-        stand.setCanTick(false);
-        stand.setCustomNameVisible(false);
-        stand.customName(null);
-        stand.setVisible(true);
-        stand.setMarker(false);
+        ArmorStand stand = initial.getWorld().spawn(initial, ArmorStand.class, spawned -> {
+            spawned.setGravity(false);
+            spawned.setInvulnerable(true);
+            spawned.setAI(false);
+            spawned.setCanTick(false);
+            spawned.setCustomNameVisible(false);
+            spawned.customName(null);
+            spawned.setVisible(true);
+            spawned.setMarker(false);
 
-        AttributeInstance scaleAttribute = stand.getAttribute(Attribute.SCALE);
-        if (scaleAttribute != null) {
-            scaleAttribute.setBaseValue(actor.scale());
-        }
+            AttributeInstance scaleAttribute = spawned.getAttribute(Attribute.SCALE);
+            if (scaleAttribute != null) {
+                scaleAttribute.setBaseValue(actor.scale());
+            }
 
-        if (actor.skinTexture() != null && actor.skinSignature() != null && stand.getEquipment() != null) {
-            stand.getEquipment().setHelmet(createSkull(actor));
-        }
+            if (actor.skinTexture() != null && actor.skinSignature() != null && spawned.getEquipment() != null) {
+                spawned.getEquipment().setHelmet(createSkull(actor));
+            }
+        });
 
         for (Player online : plugin.getServer().getOnlinePlayers()) {
             if (!online.getUniqueId().equals(viewer.getUniqueId())) {
