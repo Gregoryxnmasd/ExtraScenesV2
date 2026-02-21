@@ -149,6 +149,35 @@ public final class CinematicManager {
         return true;
     }
 
+    public boolean setPointInterpolation(String id, int tick, CinematicPoint.InterpolationMode interpolationMode) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        List<CinematicPoint> updated = new ArrayList<>(cinematic.getPoints());
+        boolean changed = false;
+
+        for (int i = 0; i < updated.size(); i++) {
+            CinematicPoint point = updated.get(i);
+            if (point.tick() != tick) {
+                continue;
+            }
+
+            updated.set(i, new CinematicPoint(point.tick(), point.location().clone(), interpolationMode));
+            changed = true;
+            break;
+        }
+
+        if (!changed) {
+            return false;
+        }
+
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated));
+        return true;
+    }
+
     public boolean clearPoints(String id) {
         String key = normalizeId(id);
         Cinematic cinematic = cinematics.get(key);
