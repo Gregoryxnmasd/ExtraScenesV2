@@ -409,12 +409,20 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0, state.actorId));
 
         player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "3")));
-        Bukkit.getScheduler().runTaskLater(plugin, () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "2"))), 20L);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "1"))), 40L);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> startActorRecordingTask(player, state), 60L);
+        state.countdownTaskTwo = Bukkit.getScheduler().runTaskLater(plugin,
+                () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "2"))),
+                20L);
+        state.countdownTaskOne = Bukkit.getScheduler().runTaskLater(plugin,
+                () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "1"))),
+                40L);
+        state.startTask = Bukkit.getScheduler().runTaskLater(plugin, () -> startActorRecordingTask(player, state), 60L);
     }
 
     private void startActorRecordingTask(Player player, ActorRecordingState state) {
+        if (actorRecordings.get(player.getUniqueId()) != state) {
+            return;
+        }
+
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             Player online = Bukkit.getPlayer(player.getUniqueId());
             if (online == null || !online.isOnline()) {
@@ -463,9 +471,22 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (state.task != null) {
             state.task.cancel();
         }
+        if (state.startTask != null) {
+            state.startTask.cancel();
+        }
+        if (state.countdownTaskOne != null) {
+            state.countdownTaskOne.cancel();
+        }
+        if (state.countdownTaskTwo != null) {
+            state.countdownTaskTwo.cancel();
+        }
+
         Player player = Bukkit.getPlayer(playerId);
         if (player != null) {
-            player.getInventory().remove(Material.LIME_DYE);
+            ItemStack slotItem = player.getInventory().getItem(8);
+            if (isActorSaveItem(slotItem)) {
+                player.getInventory().setItem(8, null);
+            }
             actorPreviewService.cleanup(player);
         }
     }
@@ -474,7 +495,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         ItemStack item = new ItemStack(Material.LIME_DYE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.GREEN + "Guardar recording actor");
+            meta.setDisplayName(ChatColor.GREEN + "Guardar recording actor (click)");
             item.setItemMeta(meta);
         }
         player.getInventory().setItem(8, item);
@@ -1139,6 +1160,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         private final List<ActorFrame> frames = new ArrayList<>();
         private int tick;
         private BukkitTask task;
+        private BukkitTask startTask;
+        private BukkitTask countdownTaskOne;
+        private BukkitTask countdownTaskTwo;
 
         private ActorRecordingState(String sceneId, String actorId, int maxTicks) {
             this.sceneId = sceneId;
