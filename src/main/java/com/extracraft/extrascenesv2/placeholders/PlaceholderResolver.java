@@ -2,6 +2,7 @@ package com.extracraft.extrascenesv2.placeholders;
 
 import com.extracraft.extrascenesv2.cinematics.Cinematic;
 import java.util.LinkedHashMap;
+import me.clip.placeholderapi.PlaceholderAPI;
 import java.util.Locale;
 import java.util.Map;
 import org.bukkit.Location;
@@ -18,7 +19,8 @@ public final class PlaceholderResolver {
         for (Map.Entry<String, String> entry : buildPlaceholders(player, cinematic, tick).entrySet()) {
             output = output.replace("{" + entry.getKey() + "}", entry.getValue());
         }
-        return output;
+
+        return PlaceholderAPI.setPlaceholders(player, output);
     }
 
     private Map<String, String> buildPlaceholders(Player player, Cinematic cinematic, int tick) {
