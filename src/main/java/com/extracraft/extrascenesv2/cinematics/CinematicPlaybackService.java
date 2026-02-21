@@ -48,7 +48,7 @@ public final class CinematicPlaybackService {
 
         stop(player);
 
-        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd);
+        PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, player.getLocation());
         states.put(player.getUniqueId(), state);
         startRunning(player, state);
         return true;
@@ -117,7 +117,7 @@ public final class CinematicPlaybackService {
             }
 
             if (state.currentTick > state.endTick) {
-                stop(player);
+                finishPlayback(player, state);
                 return;
             }
 
@@ -133,6 +133,23 @@ public final class CinematicPlaybackService {
             plugin.getLogger().severe("Error en escena para " + player.getName() + ": " + ex.getMessage());
             stop(player);
         }
+    }
+
+
+    private void finishPlayback(Player player, PlaybackState state) {
+        Cinematic.EndAction endAction = state.cinematic.getEndAction();
+        if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
+            if (state.startLocation != null && state.startLocation.getWorld() != null) {
+                player.teleport(state.startLocation);
+            }
+        } else if (endAction.type() == Cinematic.EndActionType.TELEPORT) {
+            Location teleportLocation = endAction.teleportLocation();
+            if (teleportLocation != null && teleportLocation.getWorld() != null) {
+                player.teleport(teleportLocation);
+            }
+        }
+
+        stop(player);
     }
 
     private Location interpolateLocation(Cinematic cinematic, int tick) {
@@ -261,11 +278,13 @@ public final class CinematicPlaybackService {
         private int currentTick;
         private boolean running;
         private BukkitTask task;
+        private final Location startLocation;
 
-        private PlaybackState(Cinematic cinematic, int startTick, int endTick) {
+        private PlaybackState(Cinematic cinematic, int startTick, int endTick, Location startLocation) {
             this.cinematic = cinematic;
             this.currentTick = startTick;
             this.endTick = endTick;
+            this.startLocation = startLocation == null ? null : startLocation.clone();
         }
     }
 }
