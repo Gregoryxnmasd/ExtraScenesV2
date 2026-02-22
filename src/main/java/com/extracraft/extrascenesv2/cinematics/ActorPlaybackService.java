@@ -12,6 +12,7 @@ import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,13 +122,19 @@ public final class ActorPlaybackService {
         }
 
         PacketContainer playerInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
-        playerInfo.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
-        playerInfo.getPlayerInfoDataLists().write(0, List.of(new PlayerInfoData(
+        if (playerInfo.getPlayerInfoActions().size() > 0) {
+            playerInfo.getPlayerInfoActions().write(0, EnumSet.of(EnumWrappers.PlayerInfoAction.ADD_PLAYER));
+        } else if (playerInfo.getPlayerInfoAction().size() > 0) {
+            playerInfo.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
+        }
+        if (playerInfo.getPlayerInfoDataLists().size() > 0) {
+            playerInfo.getPlayerInfoDataLists().write(0, List.of(new PlayerInfoData(
                 profile,
                 0,
                 EnumWrappers.NativeGameMode.SURVIVAL,
                 WrappedChatComponent.fromText(actor.displayName())
-        )));
+            )));
+        }
         sendPacket(viewer, playerInfo);
 
         PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
