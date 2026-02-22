@@ -461,14 +461,18 @@ public final class ActorPlaybackService {
             return;
         }
 
-        Team team = scoreboard.getTeam(actor.teamId());
-        if (team == null) {
-            team = scoreboard.registerNewTeam(actor.teamId());
-        }
+        try {
+            Team team = scoreboard.getTeam(actor.teamId());
+            if (team == null) {
+                team = scoreboard.registerNewTeam(actor.teamId());
+            }
 
-        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
-        if (!team.hasEntry(actor.profileName())) {
-            team.addEntry(actor.profileName());
+            team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+            if (!team.hasEntry(actor.profileName())) {
+                team.addEntry(actor.profileName());
+            }
+        } catch (RuntimeException ex) {
+            plugin.getLogger().fine("Skipping name tag hide for actor '" + actor.profileName() + "': " + ex.getMessage());
         }
     }
 
@@ -478,14 +482,18 @@ public final class ActorPlaybackService {
             return;
         }
 
-        Team team = scoreboard.getTeam(actor.teamId());
-        if (team == null) {
-            return;
-        }
+        try {
+            Team team = scoreboard.getTeam(actor.teamId());
+            if (team == null) {
+                return;
+            }
 
-        team.removeEntry(actor.profileName());
-        if (team.getEntries().isEmpty()) {
-            team.unregister();
+            team.removeEntry(actor.profileName());
+            if (team.getEntries().isEmpty()) {
+                team.unregister();
+            }
+        } catch (RuntimeException ex) {
+            plugin.getLogger().fine("Skipping name tag reset for actor '" + actor.profileName() + "': " + ex.getMessage());
         }
     }
 
