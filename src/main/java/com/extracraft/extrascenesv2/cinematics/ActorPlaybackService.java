@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.bukkit.Location;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -127,14 +128,13 @@ public final class ActorPlaybackService {
             sendPacket(viewer, playerInfo);
         }
 
-        PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
-        spawn.getIntegers().write(0, entityId);
-        spawn.getUUIDs().write(0, profileId);
-        spawn.getDoubles().write(0, initial.getX());
-        spawn.getDoubles().write(1, initial.getY());
-        spawn.getDoubles().write(2, initial.getZ());
-        spawn.getBytes().write(0, angleToByte(initial.getYaw()));
-        spawn.getBytes().write(1, angleToByte(initial.getPitch()));
+        PacketContainer spawn = createSpawnPacket(entityId, profileId, initial);
+        if (spawn == null) {
+            PacketContainer removeInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
+            removeInfo.getUUIDLists().write(0, List.of(profileId));
+            sendPacket(viewer, removeInfo);
+            return null;
+        }
         sendPacket(viewer, spawn);
 
         PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
@@ -247,6 +247,36 @@ public final class ActorPlaybackService {
 
     private byte angleToByte(float angle) {
         return (byte) (angle * 256.0F / 360.0F);
+    }
+
+    private PacketContainer createSpawnPacket(int entityId, UUID profileId, Location initial) {
+        try {
+            PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
+            spawn.getIntegers().write(0, entityId);
+            spawn.getUUIDs().write(0, profileId);
+            spawn.getDoubles().write(0, initial.getX());
+            spawn.getDoubles().write(1, initial.getY());
+            spawn.getDoubles().write(2, initial.getZ());
+            spawn.getBytes().write(0, angleToByte(initial.getYaw()));
+            spawn.getBytes().write(1, angleToByte(initial.getPitch()));
+            return spawn;
+        } catch (RuntimeException legacySpawnUnavailable) {
+            try {
+                PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.SPAWN_ENTITY);
+                spawn.getIntegers().write(0, entityId);
+                spawn.getUUIDs().write(0, profileId);
+                spawn.getEntityTypeModifier().write(0, EntityType.PLAYER);
+                spawn.getDoubles().write(0, initial.getX());
+                spawn.getDoubles().write(1, initial.getY());
+                spawn.getDoubles().write(2, initial.getZ());
+                spawn.getBytes().write(0, angleToByte(initial.getPitch()));
+                spawn.getBytes().write(1, angleToByte(initial.getYaw()));
+                return spawn;
+            } catch (RuntimeException modernSpawnFailed) {
+                plugin.getLogger().warning("Unable to build actor spawn packet for profile " + profileId + ": " + modernSpawnFailed.getMessage());
+                return null;
+            }
+        }
     }
 
     private PacketContainer createAddPlayerInfoPacket(UUID profileId, WrappedGameProfile profile, String displayName) {
