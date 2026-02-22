@@ -248,10 +248,16 @@ public final class ActorPlaybackService {
         dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
         dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
 
-        WrappedDataWatcher.Serializer scaleSerializer = WrappedDataWatcher.Registry.get(Float.class);
-        if (scaleSerializer != null) {
-            dataValues.add(new WrappedDataValue(12, scaleSerializer, (float) actorScale));
-        }
+        // NOTE:
+        // For player entities, metadata index 12 is not the scale field on modern versions
+        // (it is an Integer-based field). Writing a Float here causes the client to disconnect
+        // with "Invalid entity data item type" when processing set_entity_data packets.
+        //
+        // Virtual actors are spawned as PLAYER entities, so we intentionally avoid forcing
+        // scale through entity metadata.
+        //
+        // If scaling is required in the future, it must be sent via the proper attributes packet
+        // (minecraft:scale) instead of metadata.
 
         if (metadata.getDataValueCollectionModifier().size() > 0) {
             metadata.getDataValueCollectionModifier().write(0, dataValues);
