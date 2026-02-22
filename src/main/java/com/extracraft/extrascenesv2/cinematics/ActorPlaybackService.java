@@ -81,8 +81,8 @@ public final class ActorPlaybackService {
                 continue;
             }
 
-            Location next = sample(actor.frames(), tick);
-            if (next == null || next.getWorld() == null) {
+            ActorFrame next = sample(actor.frames(), tick);
+            if (next == null || next.location() == null || next.location().getWorld() == null) {
                 despawn(viewer, entities.remove(actorKey));
                 continue;
             }
@@ -96,7 +96,7 @@ public final class ActorPlaybackService {
                 continue;
             }
 
-            if (!sameWorld(virtualActor.location(), next)) {
+            if (!sameWorld(virtualActor.location(), next.location())) {
                 despawn(viewer, virtualActor);
                 VirtualActor respawned = spawnActor(viewer, actor, next);
                 if (respawned != null) {
@@ -126,15 +126,16 @@ public final class ActorPlaybackService {
         }
     }
 
-    private VirtualActor spawnActor(Player viewer, SceneActor actor, Location initial) {
-        if (initial == null || initial.getWorld() == null) {
+    private VirtualActor spawnActor(Player viewer, SceneActor actor, ActorFrame initialFrame) {
+        if (initialFrame == null || initialFrame.location() == null || initialFrame.location().getWorld() == null) {
             return null;
         }
         try {
             int entityId = nextEntityId();
             UUID profileId = UUID.randomUUID();
             String profileName = sanitizeProfileName(actor.displayName(), actor.id());
-            VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone(), actor.scale());
+            Location initial = initialFrame.location();
+            VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone(), actor.scale(), initialFrame.headYaw(), initialFrame.pose());
 
             WrappedGameProfile profile = new WrappedGameProfile(profileId, profileName);
             if (actor.skinTexture() != null && actor.skinSignature() != null) {
@@ -151,7 +152,8 @@ public final class ActorPlaybackService {
                 return null;
             }
 
-            sendMetadata(viewer, entityId);
+            sendMetadata(viewer, entityId, initialFrame.pose());
+            sendHeadRotation(viewer, entityId, initialFrame.headYaw());
             sendScaleAttribute(viewer, entityId, actor.scale());
             scheduleScaleRetries(viewer, actor.id(), entityId, actor.scale());
             hideNameTag(viewer, virtualActor);
@@ -163,7 +165,8 @@ public final class ActorPlaybackService {
         }
     }
 
-    private void move(Player viewer, VirtualActor actor, Location target) {
+    private void move(Player viewer, VirtualActor actor, ActorFrame targetFrame) {
+        Location target = targetFrame.location();
         Location current = actor.location();
         double deltaX = target.getX() - current.getX();
         double deltaY = target.getY() - current.getY();
@@ -178,7 +181,14 @@ public final class ActorPlaybackService {
             relativeMove(viewer, actor.entityId(), current, deltaX, deltaY, deltaZ, target.getYaw(), target.getPitch());
         }
 
+        sendHeadRotation(viewer, actor.entityId(), targetFrame.headYaw());
+        if (!actor.pose().equals(targetFrame.pose())) {
+            sendPoseMetadata(viewer, actor.entityId(), targetFrame.pose());
+            actor.setPose(targetFrame.pose());
+        }
+
         updateLocation(current, target);
+        actor.setHeadYaw(targetFrame.headYaw());
     }
 
     private void teleport(Player viewer, int entityId, Location location) {
@@ -256,7 +266,7 @@ public final class ActorPlaybackService {
         return legacyInfo != null && sendPacket(viewer, legacyInfo);
     }
 
-    private void sendMetadata(Player viewer, int entityId) {
+    private void sendMetadata(Player viewer, int entityId, String pose) {
         PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
         metadata.getIntegers().write(0, entityId);
 
@@ -266,6 +276,7 @@ public final class ActorPlaybackService {
         dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), false));
         // Enable all player skin model layers (hat, jacket, sleeves, pants, cape).
         dataValues.add(new WrappedDataValue(17, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x7F));
+        appendPoseDataValue(dataValues, pose);
 
         // NOTE:
         // For player entities, metadata index 12 is not the scale field on modern versions
@@ -349,7 +360,7 @@ public final class ActorPlaybackService {
         return null;
     }
 
-    private Location sample(List<ActorFrame> frames, int tick) {
+    private ActorFrame sample(List<ActorFrame> frames, int tick) {
         ActorFrame prev = null;
         ActorFrame next = null;
         for (ActorFrame frame : frames) {
@@ -365,16 +376,16 @@ public final class ActorPlaybackService {
             return null;
         }
         if (prev == null) {
-            return next.location();
+            return next;
         }
         if (next == null) {
-            return prev.location();
+            return prev;
         }
 
         Location a = prev.location();
         Location b = next.location();
         if (a == null || b == null || a.getWorld() == null || b.getWorld() == null || !a.getWorld().equals(b.getWorld())) {
-            return a;
+            return prev;
         }
 
         double t = (tick - prev.tick()) / (double) Math.max(1, next.tick() - prev.tick());
@@ -383,7 +394,41 @@ public final class ActorPlaybackService {
         double z = a.getZ() + (b.getZ() - a.getZ()) * t;
         float yaw = (float) (a.getYaw() + (b.getYaw() - a.getYaw()) * t);
         float pitch = (float) (a.getPitch() + (b.getPitch() - a.getPitch()) * t);
-        return new Location(a.getWorld(), x, y, z, yaw, pitch);
+        float headYaw = (float) (prev.headYaw() + (next.headYaw() - prev.headYaw()) * t);
+        String pose = t < 0.5D ? prev.pose() : next.pose();
+        return new ActorFrame(tick, new Location(a.getWorld(), x, y, z, yaw, pitch), headYaw, pose);
+    }
+
+
+    private void sendHeadRotation(Player viewer, int entityId, float headYaw) {
+        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_HEAD_ROTATION);
+        packet.getIntegers().write(0, entityId);
+        packet.getBytes().write(0, angleToByte(headYaw));
+        sendPacket(viewer, packet);
+    }
+
+    private void sendPoseMetadata(Player viewer, int entityId, String pose) {
+        PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+        metadata.getIntegers().write(0, entityId);
+        List<WrappedDataValue> dataValues = new ArrayList<>();
+        appendPoseDataValue(dataValues, pose);
+        if (dataValues.isEmpty()) {
+            return;
+        }
+        if (metadata.getDataValueCollectionModifier().size() > 0) {
+            metadata.getDataValueCollectionModifier().write(0, dataValues);
+            sendPacket(viewer, metadata);
+        }
+    }
+
+    private void appendPoseDataValue(List<WrappedDataValue> dataValues, String poseName) {
+        try {
+            EnumWrappers.EntityPose wrappedPose = EnumWrappers.EntityPose.valueOf(poseName);
+            Object nmsPose = EnumWrappers.getEntityPoseConverter().getGeneric(wrappedPose);
+            dataValues.add(new WrappedDataValue(6, WrappedDataWatcher.Registry.get(EnumWrappers.getEntityPoseClass()), nmsPose));
+        } catch (Exception ignored) {
+            // Keep default standing pose if conversion is unavailable for this server version.
+        }
     }
 
     private boolean isExcluded(SceneActor actor, String excludedActorId) {
@@ -544,13 +589,17 @@ public final class ActorPlaybackService {
         private final String profileName;
         private final Location location;
         private double scale;
+        private float headYaw;
+        private String pose;
 
-        private VirtualActor(int entityId, UUID profileId, String profileName, Location location, double scale) {
+        private VirtualActor(int entityId, UUID profileId, String profileName, Location location, double scale, float headYaw, String pose) {
             this.entityId = entityId;
             this.profileId = profileId;
             this.profileName = profileName;
             this.location = location;
             this.scale = scale;
+            this.headYaw = headYaw;
+            this.pose = pose;
         }
 
         private int entityId() {
@@ -575,6 +624,22 @@ public final class ActorPlaybackService {
 
         private void setScale(double scale) {
             this.scale = scale;
+        }
+
+        private float headYaw() {
+            return headYaw;
+        }
+
+        private void setHeadYaw(float headYaw) {
+            this.headYaw = headYaw;
+        }
+
+        private String pose() {
+            return pose;
+        }
+
+        private void setPose(String pose) {
+            this.pose = pose;
         }
 
         private String teamId() {

@@ -119,6 +119,8 @@ public final class CinematicManager {
                     serialized.put("z", frameLoc.getZ());
                     serialized.put("yaw", frameLoc.getYaw());
                     serialized.put("pitch", frameLoc.getPitch());
+                    serialized.put("headYaw", frame.headYaw());
+                    serialized.put("pose", frame.pose());
                     frameList.add(serialized);
                 }
                 config.set(actorPath + ".frames", frameList);
@@ -420,7 +422,9 @@ public final class CinematicManager {
                         asDouble(frameMap.get("z")),
                         (float) asDouble(frameMap.containsKey("yaw") ? frameMap.get("yaw") : 0),
                         (float) asDouble(frameMap.containsKey("pitch") ? frameMap.get("pitch") : 0));
-                frames.add(new ActorFrame(tick, loc));
+                float headYaw = (float) asDouble(frameMap.containsKey("headYaw") ? frameMap.get("headYaw") : loc.getYaw());
+                String pose = String.valueOf(frameMap.containsKey("pose") ? frameMap.get("pose") : "STANDING");
+                frames.add(new ActorFrame(tick, loc, headYaw, pose));
             }
 
             actors.put(normalizeId(actorId), new SceneActor(actorId, displayName, texture, signature, scale, appearAt, disappearAt, frames));

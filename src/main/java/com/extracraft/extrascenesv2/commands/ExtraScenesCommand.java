@@ -568,7 +568,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 saveActorRecording(online);
                 return;
             }
-            state.frames.add(new ActorFrame(state.tick, online.getLocation()));
+            state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
             online.sendActionBar(Component.text(ChatColor.AQUA + "Recording actor " + state.actorId + ChatColor.GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
