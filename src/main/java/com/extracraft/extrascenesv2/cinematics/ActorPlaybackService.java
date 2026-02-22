@@ -14,6 +14,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -21,6 +22,7 @@ public final class ActorPlaybackService {
 
     private final JavaPlugin plugin;
     private final Map<UUID, Map<String, UUID>> spawned = new HashMap<>();
+    private boolean playerSpawnFallbackLogged;
 
     public ActorPlaybackService(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -66,14 +68,14 @@ public final class ActorPlaybackService {
 
             UUID entityId = entities.get(actorKey);
             Entity entity = entityId == null ? null : Bukkit.getEntity(entityId);
-            if (!(entity instanceof Player playerActor) || !playerActor.isValid()) {
+            if (!(entity instanceof LivingEntity livingActor) || !livingActor.isValid()) {
                 Entity created = spawnActor(viewer, actor, next);
                 if (created != null) {
                     entities.put(actorKey, created.getUniqueId());
                 }
                 continue;
             }
-            playerActor.teleport(next);
+            livingActor.teleport(next);
         }
     }
 
@@ -92,8 +94,19 @@ public final class ActorPlaybackService {
             return null;
         }
 
-        Entity spawned = initial.getWorld().spawnEntity(initial, EntityType.PLAYER);
-        if (!(spawned instanceof Player actorEntity)) {
+        Entity spawned;
+        try {
+            spawned = initial.getWorld().spawnEntity(initial, EntityType.PLAYER);
+        } catch (IllegalArgumentException ex) {
+            if (!playerSpawnFallbackLogged) {
+                playerSpawnFallbackLogged = true;
+                plugin.getLogger().warning("This server build does not allow spawning PLAYER entities for scenes. "
+                        + "Falling back to VILLAGER actors.");
+            }
+            spawned = initial.getWorld().spawnEntity(initial, EntityType.VILLAGER);
+        }
+
+        if (!(spawned instanceof LivingEntity actorEntity)) {
             spawned.remove();
             return null;
         }
@@ -112,10 +125,10 @@ public final class ActorPlaybackService {
             scaleAttribute.setBaseValue(actor.scale());
         }
 
-        if (actor.skinTexture() != null && actor.skinSignature() != null) {
+        if (actorEntity instanceof Player playerActor && actor.skinTexture() != null && actor.skinSignature() != null) {
             PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), actor.displayName());
             profile.setProperty(new ProfileProperty("textures", actor.skinTexture(), actor.skinSignature()));
-            actorEntity.setPlayerProfile(profile);
+            playerActor.setPlayerProfile(profile);
         }
 
         for (Player online : plugin.getServer().getOnlinePlayers()) {
