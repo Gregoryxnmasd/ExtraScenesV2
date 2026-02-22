@@ -18,6 +18,12 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
+        if (getServer().getPluginManager().getPlugin("ProtocolLib") == null) {
+            getLogger().severe("ProtocolLib is required for packet-based scene actors. Disabling plugin.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
         this.cinematicManager = new CinematicManager(this);
         this.cinematicManager.load();
 

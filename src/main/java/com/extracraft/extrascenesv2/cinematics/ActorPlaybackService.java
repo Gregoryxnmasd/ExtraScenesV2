@@ -1,31 +1,37 @@
 package com.extracraft.extrascenesv2.cinematics;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.PacketContainer;
+import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.comphenix.protocol.wrappers.PlayerInfoData;
+import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.comphenix.protocol.wrappers.WrappedDataValue;
+import com.comphenix.protocol.wrappers.WrappedDataWatcher;
+import com.comphenix.protocol.wrappers.WrappedGameProfile;
+import com.comphenix.protocol.wrappers.WrappedSignedProperty;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.bukkit.Bukkit;
+import java.util.concurrent.ThreadLocalRandom;
 import org.bukkit.Location;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ActorPlaybackService {
 
     private final JavaPlugin plugin;
-    private final Map<UUID, Map<String, UUID>> spawned = new HashMap<>();
-    private boolean playerSpawnFallbackLogged;
+    private final ProtocolManager protocolManager;
+    private final Map<UUID, Map<String, VirtualActor>> spawned = new HashMap<>();
 
     public ActorPlaybackService(JavaPlugin plugin) {
         this.plugin = plugin;
+        this.protocolManager = ProtocolLibrary.getProtocolManager();
     }
 
     public void start(Player viewer, Cinematic cinematic, int tick) {
@@ -34,14 +40,14 @@ public final class ActorPlaybackService {
 
     public void start(Player viewer, Cinematic cinematic, int tick, String excludedActorId) {
         cleanup(viewer);
-        Map<String, UUID> entities = new LinkedHashMap<>();
+        Map<String, VirtualActor> entities = new LinkedHashMap<>();
         for (SceneActor actor : cinematic.getActors().values()) {
             if (isExcluded(actor, excludedActorId) || !actor.isVisibleAtTick(tick)) {
                 continue;
             }
-            Entity entity = spawnActor(viewer, actor, sample(actor.frames(), tick));
-            if (entity != null) {
-                entities.put(key(actor.id()), entity.getUniqueId());
+            VirtualActor spawnedActor = spawnActor(viewer, actor, sample(actor.frames(), tick));
+            if (spawnedActor != null) {
+                entities.put(key(actor.id()), spawnedActor);
             }
         }
         spawned.put(viewer.getUniqueId(), entities);
@@ -52,91 +58,125 @@ public final class ActorPlaybackService {
     }
 
     public void tick(Player viewer, Cinematic cinematic, int tick, String excludedActorId) {
-        Map<String, UUID> entities = spawned.computeIfAbsent(viewer.getUniqueId(), ignored -> new LinkedHashMap<>());
+        Map<String, VirtualActor> entities = spawned.computeIfAbsent(viewer.getUniqueId(), ignored -> new LinkedHashMap<>());
         for (SceneActor actor : cinematic.getActors().values()) {
             String actorKey = key(actor.id());
             if (isExcluded(actor, excludedActorId) || !actor.isVisibleAtTick(tick)) {
-                despawn(entities.remove(actorKey));
+                despawn(viewer, entities.remove(actorKey));
                 continue;
             }
 
             Location next = sample(actor.frames(), tick);
             if (next == null || next.getWorld() == null) {
-                despawn(entities.remove(actorKey));
+                despawn(viewer, entities.remove(actorKey));
                 continue;
             }
 
-            UUID entityId = entities.get(actorKey);
-            Entity entity = entityId == null ? null : Bukkit.getEntity(entityId);
-            if (!(entity instanceof LivingEntity livingActor) || !livingActor.isValid()) {
-                Entity created = spawnActor(viewer, actor, next);
-                if (created != null) {
-                    entities.put(actorKey, created.getUniqueId());
+            VirtualActor virtualActor = entities.get(actorKey);
+            if (virtualActor == null) {
+                virtualActor = spawnActor(viewer, actor, next);
+                if (virtualActor != null) {
+                    entities.put(actorKey, virtualActor);
                 }
                 continue;
             }
-            livingActor.teleport(next);
+
+            teleport(viewer, virtualActor, next);
         }
     }
 
     public void cleanup(Player viewer) {
-        Map<String, UUID> entities = spawned.remove(viewer.getUniqueId());
+        Map<String, VirtualActor> entities = spawned.remove(viewer.getUniqueId());
         if (entities == null) {
             return;
         }
-        for (UUID entityId : entities.values()) {
-            despawn(entityId);
+        for (VirtualActor actor : entities.values()) {
+            despawn(viewer, actor);
         }
     }
 
-    private Entity spawnActor(Player viewer, SceneActor actor, Location initial) {
+    private VirtualActor spawnActor(Player viewer, SceneActor actor, Location initial) {
         if (initial == null || initial.getWorld() == null) {
             return null;
         }
 
-        Entity spawned;
+        int entityId = ThreadLocalRandom.current().nextInt(2_000_000_000);
+        UUID profileId = UUID.randomUUID();
+        VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
+
+        WrappedGameProfile profile = new WrappedGameProfile(profileId, actor.displayName());
+        if (actor.skinTexture() != null && actor.skinSignature() != null) {
+            profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
+        }
+
+        PacketContainer playerInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
+        playerInfo.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
+        playerInfo.getPlayerInfoDataLists().write(0, List.of(new PlayerInfoData(
+                profile,
+                0,
+                EnumWrappers.NativeGameMode.SURVIVAL,
+                WrappedChatComponent.fromText(actor.displayName())
+        )));
+        sendPacket(viewer, playerInfo);
+
+        PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
+        spawn.getIntegers().write(0, entityId);
+        spawn.getUUIDs().write(0, profileId);
+        spawn.getDoubles().write(0, initial.getX());
+        spawn.getDoubles().write(1, initial.getY());
+        spawn.getDoubles().write(2, initial.getZ());
+        spawn.getBytes().write(0, angleToByte(initial.getYaw()));
+        spawn.getBytes().write(1, angleToByte(initial.getPitch()));
+        sendPacket(viewer, spawn);
+
+        PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+        metadata.getIntegers().write(0, entityId);
+        List<WrappedDataValue> dataValues = new ArrayList<>();
+        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
+        dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
+        metadata.getDataValueCollectionModifier().write(0, dataValues);
+        sendPacket(viewer, metadata);
+
+        return virtualActor;
+    }
+
+    private void teleport(Player viewer, VirtualActor actor, Location location) {
+        PacketContainer teleport = protocolManager.createPacket(PacketType.Play.Server.ENTITY_TELEPORT);
+        teleport.getIntegers().write(0, actor.entityId());
+        teleport.getDoubles().write(0, location.getX());
+        teleport.getDoubles().write(1, location.getY());
+        teleport.getDoubles().write(2, location.getZ());
+        teleport.getBytes().write(0, angleToByte(location.getYaw()));
+        teleport.getBytes().write(1, angleToByte(location.getPitch()));
+        teleport.getBooleans().write(0, true);
+        sendPacket(viewer, teleport);
+        actor.location().setX(location.getX());
+        actor.location().setY(location.getY());
+        actor.location().setZ(location.getZ());
+        actor.location().setYaw(location.getYaw());
+        actor.location().setPitch(location.getPitch());
+    }
+
+    private void despawn(Player viewer, VirtualActor actor) {
+        if (actor == null) {
+            return;
+        }
+
+        PacketContainer destroy = protocolManager.createPacket(PacketType.Play.Server.ENTITY_DESTROY);
+        destroy.getIntLists().write(0, List.of(actor.entityId()));
+        sendPacket(viewer, destroy);
+
+        PacketContainer removeInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
+        removeInfo.getUUIDLists().write(0, List.of(actor.profileId()));
+        sendPacket(viewer, removeInfo);
+    }
+
+    private void sendPacket(Player viewer, PacketContainer packet) {
         try {
-            spawned = initial.getWorld().spawnEntity(initial, EntityType.PLAYER);
-        } catch (IllegalArgumentException ex) {
-            if (!playerSpawnFallbackLogged) {
-                playerSpawnFallbackLogged = true;
-                plugin.getLogger().warning("This server build does not allow spawning PLAYER entities for scenes. "
-                        + "Falling back to VILLAGER actors.");
-            }
-            spawned = initial.getWorld().spawnEntity(initial, EntityType.VILLAGER);
+            protocolManager.sendServerPacket(viewer, packet);
+        } catch (Exception ex) {
+            plugin.getLogger().warning("Actor packet failed for " + viewer.getName() + ": " + ex.getMessage());
         }
-
-        if (!(spawned instanceof LivingEntity actorEntity)) {
-            spawned.remove();
-            return null;
-        }
-
-        actorEntity.setInvulnerable(true);
-        actorEntity.setGravity(false);
-        actorEntity.setAI(false);
-        actorEntity.setCanPickupItems(false);
-        actorEntity.setSilent(true);
-        actorEntity.setCollidable(false);
-        actorEntity.setCustomNameVisible(false);
-        actorEntity.customName(null);
-
-        AttributeInstance scaleAttribute = actorEntity.getAttribute(Attribute.SCALE);
-        if (scaleAttribute != null) {
-            scaleAttribute.setBaseValue(actor.scale());
-        }
-
-        if (actorEntity instanceof Player playerActor && actor.skinTexture() != null && actor.skinSignature() != null) {
-            PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), actor.displayName());
-            profile.setProperty(new ProfileProperty("textures", actor.skinTexture(), actor.skinSignature()));
-            playerActor.setPlayerProfile(profile);
-        }
-
-        for (Player online : plugin.getServer().getOnlinePlayers()) {
-            if (!online.getUniqueId().equals(viewer.getUniqueId())) {
-                online.hideEntity(plugin, actorEntity);
-            }
-        }
-        return actorEntity;
     }
 
     private Location sample(List<ActorFrame> frames, int tick) {
@@ -176,16 +216,6 @@ public final class ActorPlaybackService {
         return new Location(a.getWorld(), x, y, z, yaw, pitch);
     }
 
-    private void despawn(UUID entityId) {
-        if (entityId == null) {
-            return;
-        }
-        Entity entity = Bukkit.getEntity(entityId);
-        if (entity != null) {
-            entity.remove();
-        }
-    }
-
     private boolean isExcluded(SceneActor actor, String excludedActorId) {
         return excludedActorId != null && key(actor.id()).equals(key(excludedActorId));
     }
@@ -193,4 +223,10 @@ public final class ActorPlaybackService {
     private String key(String value) {
         return value.toLowerCase(Locale.ROOT);
     }
+
+    private byte angleToByte(float angle) {
+        return (byte) (angle * 256.0F / 360.0F);
+    }
+
+    private record VirtualActor(int entityId, UUID profileId, Location location) {}
 }
