@@ -27,6 +27,8 @@ import java.lang.reflect.Method;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ActorPlaybackService {
@@ -454,43 +456,36 @@ public final class ActorPlaybackService {
     }
 
     private void hideNameTag(Player viewer, VirtualActor actor) {
-        PacketContainer teamPacket = createNameTagVisibilityPacket(actor.teamId(), actor.profileName(), "never", (byte) 0);
-        if (teamPacket != null) {
-            sendPacket(viewer, teamPacket);
+        Scoreboard scoreboard = viewer.getScoreboard();
+        if (scoreboard == null) {
+            return;
+        }
+
+        Team team = scoreboard.getTeam(actor.teamId());
+        if (team == null) {
+            team = scoreboard.registerNewTeam(actor.teamId());
+        }
+
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+        if (!team.hasEntry(actor.profileName())) {
+            team.addEntry(actor.profileName());
         }
     }
 
     private void showNameTag(Player viewer, VirtualActor actor) {
-        PacketContainer teamPacket = createNameTagVisibilityPacket(actor.teamId(), actor.profileName(), "always", (byte) 1);
-        if (teamPacket != null) {
-            sendPacket(viewer, teamPacket);
+        Scoreboard scoreboard = viewer.getScoreboard();
+        if (scoreboard == null) {
+            return;
         }
-    }
 
-    private PacketContainer createNameTagVisibilityPacket(String teamId, String entry, String visibility, byte mode) {
-        try {
-            PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.SCOREBOARD_TEAM);
-            packet.getStrings().write(0, teamId);
-            packet.getIntegers().write(0, (int) mode);
+        Team team = scoreboard.getTeam(actor.teamId());
+        if (team == null) {
+            return;
+        }
 
-            if (mode == 0) {
-                packet.getStrings().write(1, teamId);
-                packet.getStrings().write(2, "");
-                packet.getStrings().write(3, "");
-                packet.getStrings().write(4, visibility);
-                packet.getStrings().write(5, "never");
-                if (packet.getIntegers().size() > 1) {
-                    packet.getIntegers().write(1, 0);
-                }
-                if (packet.getSpecificModifier(Collection.class).size() > 0) {
-                    packet.getSpecificModifier(Collection.class).write(0, List.of(entry));
-                }
-            }
-
-            return packet;
-        } catch (RuntimeException ex) {
-            plugin.getLogger().warning("Unable to build SCOREBOARD_TEAM packet for actor entry " + entry + ": " + ex.getMessage());
-            return null;
+        team.removeEntry(actor.profileName());
+        if (team.getEntries().isEmpty()) {
+            team.unregister();
         }
     }
 
