@@ -13,6 +13,7 @@ import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -122,9 +123,10 @@ public final class ActorPlaybackService {
         try {
             int entityId = nextEntityId();
             UUID profileId = UUID.randomUUID();
-            VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
+            String profileName = sanitizeProfileName(actor.displayName(), actor.id());
+            VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone());
 
-            WrappedGameProfile profile = new WrappedGameProfile(profileId, sanitizeProfileName(actor.displayName(), actor.id()));
+            WrappedGameProfile profile = new WrappedGameProfile(profileId, profileName);
             if (actor.skinTexture() != null && actor.skinSignature() != null) {
                 profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
             }
@@ -140,6 +142,7 @@ public final class ActorPlaybackService {
             }
 
             sendMetadata(viewer, entityId, actor.scale());
+            hideNameTag(viewer, virtualActor);
 
             return virtualActor;
         } catch (RuntimeException ex) {
@@ -215,6 +218,7 @@ public final class ActorPlaybackService {
         sendPacket(viewer, destroy);
 
         removeFromPlayerInfo(viewer, actor.profileId());
+        showNameTag(viewer, actor);
     }
 
     private void removeFromPlayerInfo(Player viewer, UUID profileId) {
@@ -248,6 +252,8 @@ public final class ActorPlaybackService {
         // Keep actors visible and do not force a floating name tag above their head.
         dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x00));
         dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), false));
+        // Enable all player skin model layers (hat, jacket, sleeves, pants, cape).
+        dataValues.add(new WrappedDataValue(17, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x7F));
 
         // NOTE:
         // For player entities, metadata index 12 is not the scale field on modern versions
@@ -412,6 +418,51 @@ public final class ActorPlaybackService {
         }
     }
 
+    private void hideNameTag(Player viewer, VirtualActor actor) {
+        PacketContainer teamPacket = createNameTagVisibilityPacket(actor.teamId(), actor.profileName(), "never", (byte) 0);
+        if (teamPacket != null) {
+            sendPacket(viewer, teamPacket);
+        }
+    }
 
-    private record VirtualActor(int entityId, UUID profileId, Location location) {}
+    private void showNameTag(Player viewer, VirtualActor actor) {
+        PacketContainer teamPacket = createNameTagVisibilityPacket(actor.teamId(), actor.profileName(), "always", (byte) 1);
+        if (teamPacket != null) {
+            sendPacket(viewer, teamPacket);
+        }
+    }
+
+    private PacketContainer createNameTagVisibilityPacket(String teamId, String entry, String visibility, byte mode) {
+        try {
+            PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.SCOREBOARD_TEAM);
+            packet.getStrings().write(0, teamId);
+            packet.getIntegers().write(0, (int) mode);
+
+            if (mode == 0) {
+                packet.getStrings().write(1, teamId);
+                packet.getStrings().write(2, "");
+                packet.getStrings().write(3, "");
+                packet.getStrings().write(4, visibility);
+                packet.getStrings().write(5, "never");
+                if (packet.getIntegers().size() > 1) {
+                    packet.getIntegers().write(1, 0);
+                }
+                if (packet.getSpecificModifier(Collection.class).size() > 0) {
+                    packet.getSpecificModifier(Collection.class).write(0, List.of(entry));
+                }
+            }
+
+            return packet;
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Unable to build SCOREBOARD_TEAM packet for actor entry " + entry + ": " + ex.getMessage());
+            return null;
+        }
+    }
+
+
+    private record VirtualActor(int entityId, UUID profileId, String profileName, Location location) {
+        private String teamId() {
+            return "esv2_" + entityId;
+        }
+    }
 }
