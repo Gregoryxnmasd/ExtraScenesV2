@@ -113,39 +113,43 @@ public final class ActorPlaybackService {
         if (initial == null || initial.getWorld() == null) {
             return null;
         }
+        try {
+            int entityId = ThreadLocalRandom.current().nextInt(2_000_000_000);
+            UUID profileId = UUID.randomUUID();
+            VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
 
-        int entityId = ThreadLocalRandom.current().nextInt(2_000_000_000);
-        UUID profileId = UUID.randomUUID();
-        VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
+            WrappedGameProfile profile = new WrappedGameProfile(profileId, sanitizeProfileName(actor.displayName(), actor.id()));
+            if (actor.skinTexture() != null && actor.skinSignature() != null) {
+                profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
+            }
 
-        WrappedGameProfile profile = new WrappedGameProfile(profileId, sanitizeProfileName(actor.displayName(), actor.id()));
-        if (actor.skinTexture() != null && actor.skinSignature() != null) {
-            profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
-        }
+            PacketContainer playerInfo = createAddPlayerInfoPacket(profileId, profile, actor.displayName());
+            if (playerInfo != null) {
+                sendPacket(viewer, playerInfo);
+            }
 
-        PacketContainer playerInfo = createAddPlayerInfoPacket(profileId, profile, actor.displayName());
-        if (playerInfo != null) {
-            sendPacket(viewer, playerInfo);
-        }
+            PacketContainer spawn = createSpawnPacket(entityId, profileId, initial);
+            if (spawn == null) {
+                removeFromPlayerInfo(viewer, profileId);
+                return null;
+            }
+            sendPacket(viewer, spawn);
 
-        PacketContainer spawn = createSpawnPacket(entityId, profileId, initial);
-        if (spawn == null) {
-            PacketContainer removeInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
-            removeInfo.getUUIDLists().write(0, List.of(profileId));
-            sendPacket(viewer, removeInfo);
+            PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+            metadata.getIntegers().write(0, entityId);
+            List<WrappedDataValue> dataValues = new ArrayList<>();
+            dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
+            dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
+            if (metadata.getDataValueCollectionModifier().size() > 0) {
+                metadata.getDataValueCollectionModifier().write(0, dataValues);
+                sendPacket(viewer, metadata);
+            }
+
+            return virtualActor;
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Unable to spawn actor '" + actor.id() + "' for " + viewer.getName() + ": " + ex.getMessage());
             return null;
         }
-        sendPacket(viewer, spawn);
-
-        PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
-        metadata.getIntegers().write(0, entityId);
-        List<WrappedDataValue> dataValues = new ArrayList<>();
-        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
-        dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
-        metadata.getDataValueCollectionModifier().write(0, dataValues);
-        sendPacket(viewer, metadata);
-
-        return virtualActor;
     }
 
     private void teleport(Player viewer, VirtualActor actor, Location location) {
@@ -156,7 +160,9 @@ public final class ActorPlaybackService {
         teleport.getDoubles().write(2, location.getZ());
         teleport.getBytes().write(0, angleToByte(location.getYaw()));
         teleport.getBytes().write(1, angleToByte(location.getPitch()));
-        teleport.getBooleans().write(0, true);
+        if (teleport.getBooleans().size() > 0) {
+            teleport.getBooleans().write(0, true);
+        }
         sendPacket(viewer, teleport);
         actor.location().setX(location.getX());
         actor.location().setY(location.getY());
@@ -171,12 +177,22 @@ public final class ActorPlaybackService {
         }
 
         PacketContainer destroy = protocolManager.createPacket(PacketType.Play.Server.ENTITY_DESTROY);
-        destroy.getIntLists().write(0, List.of(actor.entityId()));
+        if (destroy.getIntLists().size() > 0) {
+            destroy.getIntLists().write(0, List.of(actor.entityId()));
+        } else if (destroy.getIntegerArrays().size() > 0) {
+            destroy.getIntegerArrays().write(0, new int[]{actor.entityId()});
+        }
         sendPacket(viewer, destroy);
 
+        removeFromPlayerInfo(viewer, actor.profileId());
+    }
+
+    private void removeFromPlayerInfo(Player viewer, UUID profileId) {
         PacketContainer removeInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO_REMOVE);
-        removeInfo.getUUIDLists().write(0, List.of(actor.profileId()));
-        sendPacket(viewer, removeInfo);
+        if (removeInfo.getUUIDLists().size() > 0) {
+            removeInfo.getUUIDLists().write(0, List.of(profileId));
+            sendPacket(viewer, removeInfo);
+        }
     }
 
     private void sendPacket(Player viewer, PacketContainer packet) {
