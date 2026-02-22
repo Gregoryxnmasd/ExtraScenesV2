@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -38,6 +39,12 @@ public final class ActorPlaybackService {
     private static final int MAX_ENTITY_ID = Integer.MAX_VALUE - 10_000;
 
     private static final long[] SCALE_RETRY_DELAYS = {1L, 5L, 20L};
+    private static final List<String> SCALE_ATTRIBUTE_KEYS = List.of(
+            "minecraft:scale",
+            "scale",
+            "generic.scale",
+            "minecraft:generic.scale"
+    );
 
     private final JavaPlugin plugin;
     private final ProtocolManager protocolManager;
@@ -345,17 +352,21 @@ public final class ActorPlaybackService {
     }
 
     private WrappedAttribute buildScaleAttribute(PacketContainer attributesPacket, double actorScale) {
-        for (String attributeKey : List.of("minecraft:scale", "minecraft:generic.scale")) {
+        double normalizedScale = Math.max(0.0625D, Math.min(16.0D, actorScale));
+        for (String attributeKey : SCALE_ATTRIBUTE_KEYS) {
             try {
                 return WrappedAttribute.newBuilder()
                         .attributeKey(attributeKey)
-                        .baseValue(actorScale)
+                        .baseValue(normalizedScale)
+                        .modifiers(List.of())
                         .packet(attributesPacket)
                         .build();
             } catch (RuntimeException ignored) {
-                // Try the legacy key fallback.
+                // Try the next key fallback.
             }
         }
+
+        plugin.getLogger().log(Level.FINE, "Unable to resolve any compatible attribute key for actor scale packet.");
 
         return null;
     }
