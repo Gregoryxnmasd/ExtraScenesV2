@@ -5,6 +5,7 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.comphenix.protocol.wrappers.EnumWrappers.NativeGameMode;
 import com.comphenix.protocol.wrappers.PlayerInfoData;
 import com.comphenix.protocol.wrappers.WrappedChatComponent;
 import com.comphenix.protocol.wrappers.WrappedDataValue;
@@ -12,7 +13,6 @@ import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadLocalRandom;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
@@ -28,9 +29,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ActorPlaybackService {
 
+    private static final double RELATIVE_MOVE_THRESHOLD = 7.9D;
+    private static final int MIN_ENTITY_ID = 200_000;
+    private static final int MAX_ENTITY_ID = Integer.MAX_VALUE - 10_000;
+
     private final JavaPlugin plugin;
     private final ProtocolManager protocolManager;
     private final Map<UUID, Map<String, VirtualActor>> spawned = new HashMap<>();
+    private final AtomicInteger entitySequence = new AtomicInteger(ThreadLocalRandom.current().nextInt(MIN_ENTITY_ID, MIN_ENTITY_ID + 100_000));
 
     public ActorPlaybackService(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -95,7 +101,7 @@ public final class ActorPlaybackService {
                 continue;
             }
 
-            teleport(viewer, virtualActor, next);
+            move(viewer, virtualActor, next);
         }
     }
 
@@ -114,7 +120,7 @@ public final class ActorPlaybackService {
             return null;
         }
         try {
-            int entityId = ThreadLocalRandom.current().nextInt(2_000_000_000);
+            int entityId = nextEntityId();
             UUID profileId = UUID.randomUUID();
             VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
 
@@ -123,27 +129,17 @@ public final class ActorPlaybackService {
                 profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
             }
 
-            PacketContainer playerInfo = createAddPlayerInfoPacket(profileId, profile, actor.displayName());
-            if (playerInfo != null) {
-                sendPacket(viewer, playerInfo);
+            if (!sendAddPlayerInfo(viewer, profileId, profile, actor.displayName())) {
+                return null;
             }
 
             PacketContainer spawn = createSpawnPacket(entityId, profileId, initial);
-            if (spawn == null) {
+            if (spawn == null || !sendPacket(viewer, spawn)) {
                 removeFromPlayerInfo(viewer, profileId);
                 return null;
             }
-            sendPacket(viewer, spawn);
 
-            PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
-            metadata.getIntegers().write(0, entityId);
-            List<WrappedDataValue> dataValues = new ArrayList<>();
-            dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
-            dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
-            if (metadata.getDataValueCollectionModifier().size() > 0) {
-                metadata.getDataValueCollectionModifier().write(0, dataValues);
-                sendPacket(viewer, metadata);
-            }
+            sendMetadata(viewer, entityId, actor.scale());
 
             return virtualActor;
         } catch (RuntimeException ex) {
@@ -152,9 +148,27 @@ public final class ActorPlaybackService {
         }
     }
 
-    private void teleport(Player viewer, VirtualActor actor, Location location) {
+    private void move(Player viewer, VirtualActor actor, Location target) {
+        Location current = actor.location();
+        double deltaX = target.getX() - current.getX();
+        double deltaY = target.getY() - current.getY();
+        double deltaZ = target.getZ() - current.getZ();
+        boolean requiresTeleport = Math.abs(deltaX) > RELATIVE_MOVE_THRESHOLD
+            || Math.abs(deltaY) > RELATIVE_MOVE_THRESHOLD
+            || Math.abs(deltaZ) > RELATIVE_MOVE_THRESHOLD;
+
+        if (requiresTeleport) {
+            teleport(viewer, actor.entityId(), target);
+        } else {
+            relativeMove(viewer, actor.entityId(), current, deltaX, deltaY, deltaZ, target.getYaw(), target.getPitch());
+        }
+
+        updateLocation(current, target);
+    }
+
+    private void teleport(Player viewer, int entityId, Location location) {
         PacketContainer teleport = protocolManager.createPacket(PacketType.Play.Server.ENTITY_TELEPORT);
-        teleport.getIntegers().write(0, actor.entityId());
+        teleport.getIntegers().write(0, entityId);
         teleport.getDoubles().write(0, location.getX());
         teleport.getDoubles().write(1, location.getY());
         teleport.getDoubles().write(2, location.getZ());
@@ -164,11 +178,27 @@ public final class ActorPlaybackService {
             teleport.getBooleans().write(0, true);
         }
         sendPacket(viewer, teleport);
-        actor.location().setX(location.getX());
-        actor.location().setY(location.getY());
-        actor.location().setZ(location.getZ());
-        actor.location().setYaw(location.getYaw());
-        actor.location().setPitch(location.getPitch());
+    }
+
+    private void relativeMove(Player viewer, int entityId, Location current, double deltaX, double deltaY, double deltaZ, float yaw, float pitch) {
+        PacketContainer move = protocolManager.createPacket(PacketType.Play.Server.REL_ENTITY_MOVE_LOOK);
+        move.getIntegers().write(0, entityId);
+        move.getShorts().write(0, toRelativeShort(deltaX));
+        move.getShorts().write(1, toRelativeShort(deltaY));
+        move.getShorts().write(2, toRelativeShort(deltaZ));
+        move.getBytes().write(0, angleToByte(yaw));
+        move.getBytes().write(1, angleToByte(pitch));
+        if (move.getBooleans().size() > 0) {
+            move.getBooleans().write(0, true);
+        }
+        if (!sendPacket(viewer, move)) {
+            teleport(viewer, entityId, new Location(current.getWorld(),
+                current.getX() + deltaX,
+                current.getY() + deltaY,
+                current.getZ() + deltaZ,
+                yaw,
+                pitch));
+        }
     }
 
     private void despawn(Player viewer, VirtualActor actor) {
@@ -195,11 +225,37 @@ public final class ActorPlaybackService {
         }
     }
 
-    private void sendPacket(Player viewer, PacketContainer packet) {
+    private boolean sendPacket(Player viewer, PacketContainer packet) {
         try {
             protocolManager.sendServerPacket(viewer, packet);
+            return true;
         } catch (Exception ex) {
             plugin.getLogger().warning("Actor packet failed for " + viewer.getName() + ": " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private boolean sendAddPlayerInfo(Player viewer, UUID profileId, WrappedGameProfile profile, String displayName) {
+        PacketContainer legacyInfo = createLegacyAddPlayerInfoPacket(profileId, profile, displayName);
+        return legacyInfo != null && sendPacket(viewer, legacyInfo);
+    }
+
+    private void sendMetadata(Player viewer, int entityId, double actorScale) {
+        PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+        metadata.getIntegers().write(0, entityId);
+
+        List<WrappedDataValue> dataValues = new ArrayList<>();
+        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
+        dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
+
+        WrappedDataWatcher.Serializer scaleSerializer = WrappedDataWatcher.Registry.get(Float.class);
+        if (scaleSerializer != null) {
+            dataValues.add(new WrappedDataValue(12, scaleSerializer, (float) actorScale));
+        }
+
+        if (metadata.getDataValueCollectionModifier().size() > 0) {
+            metadata.getDataValueCollectionModifier().write(0, dataValues);
+            sendPacket(viewer, metadata);
         }
     }
 
@@ -265,6 +321,27 @@ public final class ActorPlaybackService {
         return (byte) (angle * 256.0F / 360.0F);
     }
 
+    private short toRelativeShort(double delta) {
+        return (short) Math.round(delta * 4096.0D);
+    }
+
+    private void updateLocation(Location current, Location target) {
+        current.setX(target.getX());
+        current.setY(target.getY());
+        current.setZ(target.getZ());
+        current.setYaw(target.getYaw());
+        current.setPitch(target.getPitch());
+    }
+
+    private int nextEntityId() {
+        int next = entitySequence.incrementAndGet();
+        if (next >= MAX_ENTITY_ID) {
+            entitySequence.set(MIN_ENTITY_ID);
+            return entitySequence.incrementAndGet();
+        }
+        return next;
+    }
+
     private PacketContainer createSpawnPacket(int entityId, UUID profileId, Location initial) {
         try {
             PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
@@ -295,13 +372,13 @@ public final class ActorPlaybackService {
         }
     }
 
-    private PacketContainer createAddPlayerInfoPacket(UUID profileId, WrappedGameProfile profile, String displayName) {
+    private PacketContainer createLegacyAddPlayerInfoPacket(UUID profileId, WrappedGameProfile profile, String displayName) {
         PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
         WrappedChatComponent chatDisplayName = WrappedChatComponent.fromText(displayName == null ? "" : displayName);
 
         try {
             if (packet.getPlayerInfoActions().size() > 0) {
-                packet.getPlayerInfoActions().write(0, EnumSet.of(EnumWrappers.PlayerInfoAction.ADD_PLAYER));
+                packet.getPlayerInfoActions().write(0, Collections.singleton(EnumWrappers.PlayerInfoAction.ADD_PLAYER));
             } else if (packet.getPlayerInfoAction().size() > 0) {
                 packet.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
             }
@@ -310,7 +387,7 @@ public final class ActorPlaybackService {
                 profileId,
                 0,
                 true,
-                EnumWrappers.NativeGameMode.SURVIVAL,
+                NativeGameMode.SURVIVAL,
                 profile,
                 chatDisplayName
             ));
@@ -327,6 +404,7 @@ public final class ActorPlaybackService {
             return null;
         }
     }
+
 
     private record VirtualActor(int entityId, UUID profileId, Location location) {}
 }
