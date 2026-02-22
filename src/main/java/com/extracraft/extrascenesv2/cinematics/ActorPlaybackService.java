@@ -81,6 +81,17 @@ public final class ActorPlaybackService {
                 continue;
             }
 
+            if (!sameWorld(virtualActor.location(), next)) {
+                despawn(viewer, virtualActor);
+                VirtualActor respawned = spawnActor(viewer, actor, next);
+                if (respawned != null) {
+                    entities.put(actorKey, respawned);
+                } else {
+                    entities.remove(actorKey);
+                }
+                continue;
+            }
+
             teleport(viewer, virtualActor, next);
         }
     }
@@ -104,7 +115,7 @@ public final class ActorPlaybackService {
         UUID profileId = UUID.randomUUID();
         VirtualActor virtualActor = new VirtualActor(entityId, profileId, initial.clone());
 
-        WrappedGameProfile profile = new WrappedGameProfile(profileId, actor.displayName());
+        WrappedGameProfile profile = new WrappedGameProfile(profileId, sanitizeProfileName(actor.displayName(), actor.id()));
         if (actor.skinTexture() != null && actor.skinSignature() != null) {
             profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
         }
@@ -222,6 +233,19 @@ public final class ActorPlaybackService {
 
     private String key(String value) {
         return value.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean sameWorld(Location a, Location b) {
+        return a != null && b != null && a.getWorld() != null && a.getWorld().equals(b.getWorld());
+    }
+
+    private String sanitizeProfileName(String displayName, String fallbackId) {
+        String base = (displayName == null || displayName.isBlank()) ? fallbackId : displayName;
+        String stripped = base.replaceAll("[^A-Za-z0-9_]", "");
+        if (stripped.isBlank()) {
+            stripped = "SceneActor";
+        }
+        return stripped.length() <= 16 ? stripped : stripped.substring(0, 16);
     }
 
     private byte angleToByte(float angle) {
