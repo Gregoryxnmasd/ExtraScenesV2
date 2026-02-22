@@ -40,6 +40,7 @@
             <version>2.11.6</version>
             <scope>provided</scope>
         </dependency>
+        <!-- ProtocolLib 5.4.0 is not published in the configured Maven repositories. -->
         <dependency>
             <groupId>com.comphenix.protocol</groupId>
             <artifactId>ProtocolLib</artifactId>
@@ -51,6 +52,31 @@
 
     <build>
         <plugins>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>check-local-protocollib</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireFilesExist>
+                                    <files>
+                                        <file>${project.basedir}/libs/ProtocolLib.jar</file>
+                                    </files>
+                                    <message>Missing libs/ProtocolLib.jar. ProtocolLib 5.4.0 must be provided locally because it is not in configured Maven repos.</message>
+                                </requireFilesExist>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
