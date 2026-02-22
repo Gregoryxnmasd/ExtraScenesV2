@@ -290,7 +290,10 @@ public final class ActorPlaybackService {
                 return;
             }
 
-            if (attributesPacket.getSpecificModifier(Collection.class).size() > 0) {
+            if (attributesPacket.getAttributeCollectionModifier().size() > 0) {
+                attributesPacket.getAttributeCollectionModifier().write(0, List.of(wrappedAttribute));
+            } else if (attributesPacket.getSpecificModifier(Collection.class).size() > 0) {
+                // Legacy fallback for ProtocolLib builds that still expose raw collections.
                 attributesPacket.getSpecificModifier(Collection.class).write(0, List.of(wrappedAttribute));
             }
 
