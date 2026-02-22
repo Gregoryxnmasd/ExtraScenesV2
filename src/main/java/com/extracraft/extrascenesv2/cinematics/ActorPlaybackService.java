@@ -245,8 +245,9 @@ public final class ActorPlaybackService {
         metadata.getIntegers().write(0, entityId);
 
         List<WrappedDataValue> dataValues = new ArrayList<>();
-        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
-        dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), true));
+        // Keep actors visible and do not force a floating name tag above their head.
+        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x00));
+        dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), false));
 
         // NOTE:
         // For player entities, metadata index 12 is not the scale field on modern versions
