@@ -13,6 +13,7 @@ import com.comphenix.protocol.wrappers.WrappedGameProfile;
 import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,21 +122,10 @@ public final class ActorPlaybackService {
             profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
         }
 
-        PacketContainer playerInfo = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
-        if (playerInfo.getPlayerInfoActions().size() > 0) {
-            playerInfo.getPlayerInfoActions().write(0, EnumSet.of(EnumWrappers.PlayerInfoAction.ADD_PLAYER));
-        } else if (playerInfo.getPlayerInfoAction().size() > 0) {
-            playerInfo.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
+        PacketContainer playerInfo = createAddPlayerInfoPacket(profileId, profile, actor.displayName());
+        if (playerInfo != null) {
+            sendPacket(viewer, playerInfo);
         }
-        if (playerInfo.getPlayerInfoDataLists().size() > 0) {
-            playerInfo.getPlayerInfoDataLists().write(0, List.of(new PlayerInfoData(
-                profile,
-                0,
-                EnumWrappers.NativeGameMode.SURVIVAL,
-                WrappedChatComponent.fromText(actor.displayName())
-            )));
-        }
-        sendPacket(viewer, playerInfo);
 
         PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
         spawn.getIntegers().write(0, entityId);
@@ -257,6 +247,39 @@ public final class ActorPlaybackService {
 
     private byte angleToByte(float angle) {
         return (byte) (angle * 256.0F / 360.0F);
+    }
+
+    private PacketContainer createAddPlayerInfoPacket(UUID profileId, WrappedGameProfile profile, String displayName) {
+        PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
+        WrappedChatComponent chatDisplayName = WrappedChatComponent.fromText(displayName == null ? "" : displayName);
+
+        try {
+            if (packet.getPlayerInfoActions().size() > 0) {
+                packet.getPlayerInfoActions().write(0, EnumSet.of(EnumWrappers.PlayerInfoAction.ADD_PLAYER));
+            } else if (packet.getPlayerInfoAction().size() > 0) {
+                packet.getPlayerInfoAction().write(0, EnumWrappers.PlayerInfoAction.ADD_PLAYER);
+            }
+
+            List<PlayerInfoData> data = Collections.singletonList(new PlayerInfoData(
+                profileId,
+                0,
+                true,
+                EnumWrappers.NativeGameMode.SURVIVAL,
+                profile,
+                chatDisplayName
+            ));
+
+            if (packet.getLists(PlayerInfoData.getConverter()).size() > 0) {
+                packet.getLists(PlayerInfoData.getConverter()).write(0, data);
+            } else if (packet.getPlayerInfoDataLists().size() > 0) {
+                packet.getPlayerInfoDataLists().write(0, data);
+            }
+
+            return packet;
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Unable to build PLAYER_INFO packet for actor " + profile.getName() + ": " + ex.getMessage());
+            return null;
+        }
     }
 
     private record VirtualActor(int entityId, UUID profileId, Location location) {}
