@@ -299,16 +299,17 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActor(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|window|record>");
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|scale|window|record>");
             return;
         }
 
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "create" -> handleActorCreate(sender, args);
             case "skin" -> handleActorSkin(sender, args);
+            case "scale" -> handleActorScale(sender, args);
             case "window" -> handleActorWindow(sender, args);
             case "record" -> handleActorRecord(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|window|record>");
+            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|scale|window|record>");
         }
     }
 
@@ -366,6 +367,35 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
         manager.save();
         sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
+    }
+
+    private void handleActorScale(CommandSender sender, String[] args) {
+        if (args.length < 5) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor scale <scene> <actorId> <scale>");
+            return;
+        }
+
+        SceneActor actor = manager.getActor(args[2], args[3]);
+        if (actor == null) {
+            sender.sendMessage(ChatColor.RED + "Actor no existe. Créalo primero.");
+            return;
+        }
+
+        double scale;
+        try {
+            scale = Double.parseDouble(args[4]);
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(ChatColor.RED + "Escala inválida.");
+            return;
+        }
+
+        if (!manager.upsertActor(args[2], args[3], actor.displayName(), scale, actor.skinTexture(), actor.skinSignature())) {
+            sender.sendMessage(ChatColor.RED + "No se pudo actualizar el scale del actor.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(ChatColor.GREEN + "Scale del actor actualizado a " + scale + ".");
     }
 
     private SkinData fetchSkinByName(String username) {
@@ -1059,6 +1089,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> [scale]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <playerName|texture> [signature]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record stop");
@@ -1155,7 +1186,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("start", "stop", "clear");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
-            return List.of("create", "skin", "window", "record");
+            return List.of("create", "skin", "scale", "window", "record");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record")) {
@@ -1166,11 +1197,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return manager.getCinematicIds().stream().filter(id -> id.startsWith(args[3])).toList();
         }
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
 
-        if (args.length == 4 && args[0].equalsIgnoreCase("actor") && List.of("skin", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
+        if (args.length == 4 && args[0].equalsIgnoreCase("actor") && List.of("skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
             return manager.getCinematic(args[2])
                     .map(cinematic -> cinematic.getActors().values().stream().map(SceneActor::id).filter(id -> id.startsWith(args[3])).toList())
                     .orElse(Collections.emptyList());

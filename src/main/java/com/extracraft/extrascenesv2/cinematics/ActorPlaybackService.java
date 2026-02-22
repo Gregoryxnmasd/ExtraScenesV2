@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadLocalRandom;
+import java.lang.reflect.Method;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -144,6 +145,7 @@ public final class ActorPlaybackService {
             }
 
             sendMetadata(viewer, entityId, actor.scale());
+            sendScaleAttribute(viewer, entityId, actor.scale());
             hideNameTag(viewer, virtualActor);
 
             return virtualActor;
@@ -271,6 +273,39 @@ public final class ActorPlaybackService {
         if (metadata.getDataValueCollectionModifier().size() > 0) {
             metadata.getDataValueCollectionModifier().write(0, dataValues);
             sendPacket(viewer, metadata);
+        }
+    }
+
+    private void sendScaleAttribute(Player viewer, int entityId, double actorScale) {
+        if (Math.abs(actorScale - 1.0D) < 0.0001D) {
+            return;
+        }
+
+        try {
+            PacketContainer attributesPacket = protocolManager.createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES);
+            attributesPacket.getIntegers().write(0, entityId);
+
+            Class<?> snapshotClass = Class.forName("com.comphenix.protocol.wrappers.WrappedAttribute$Builder");
+            Method newBuilder = snapshotClass.getMethod("newBuilder");
+            Object builder = newBuilder.invoke(null);
+
+            Method attributeKey = snapshotClass.getMethod("attributeKey", String.class);
+            Method baseValue = snapshotClass.getMethod("baseValue", double.class);
+            Method packetModifier = snapshotClass.getMethod("packet", PacketContainer.class);
+            Method build = snapshotClass.getMethod("build");
+
+            attributeKey.invoke(builder, "minecraft:generic.scale");
+            baseValue.invoke(builder, actorScale);
+            packetModifier.invoke(builder, attributesPacket);
+            Object wrappedAttribute = build.invoke(builder);
+
+            if (attributesPacket.getSpecificModifier(Collection.class).size() > 0) {
+                attributesPacket.getSpecificModifier(Collection.class).write(0, List.of(wrappedAttribute));
+            }
+
+            sendPacket(viewer, attributesPacket);
+        } catch (Throwable ignored) {
+            // Not all ProtocolLib builds expose attribute wrappers equally.
         }
     }
 
