@@ -8,6 +8,7 @@ import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.comphenix.protocol.wrappers.EnumWrappers.NativeGameMode;
 import com.comphenix.protocol.wrappers.PlayerInfoData;
 import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.comphenix.protocol.wrappers.WrappedAttribute;
 import com.comphenix.protocol.wrappers.WrappedDataValue;
 import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import com.comphenix.protocol.wrappers.WrappedGameProfile;
@@ -21,9 +22,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadLocalRandom;
-import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -285,28 +285,36 @@ public final class ActorPlaybackService {
             PacketContainer attributesPacket = protocolManager.createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES);
             attributesPacket.getIntegers().write(0, entityId);
 
-            Class<?> snapshotClass = Class.forName("com.comphenix.protocol.wrappers.WrappedAttribute$Builder");
-            Method newBuilder = snapshotClass.getMethod("newBuilder");
-            Object builder = newBuilder.invoke(null);
-
-            Method attributeKey = snapshotClass.getMethod("attributeKey", String.class);
-            Method baseValue = snapshotClass.getMethod("baseValue", double.class);
-            Method packetModifier = snapshotClass.getMethod("packet", PacketContainer.class);
-            Method build = snapshotClass.getMethod("build");
-
-            attributeKey.invoke(builder, "minecraft:generic.scale");
-            baseValue.invoke(builder, actorScale);
-            packetModifier.invoke(builder, attributesPacket);
-            Object wrappedAttribute = build.invoke(builder);
+            WrappedAttribute wrappedAttribute = buildScaleAttribute(attributesPacket, actorScale);
+            if (wrappedAttribute == null) {
+                return;
+            }
 
             if (attributesPacket.getSpecificModifier(Collection.class).size() > 0) {
                 attributesPacket.getSpecificModifier(Collection.class).write(0, List.of(wrappedAttribute));
             }
 
             sendPacket(viewer, attributesPacket);
-        } catch (Throwable ignored) {
+        } catch (Throwable ex) {
             // Not all ProtocolLib builds expose attribute wrappers equally.
+            plugin.getLogger().fine("Unable to send actor scale attribute: " + ex.getMessage());
         }
+    }
+
+    private WrappedAttribute buildScaleAttribute(PacketContainer attributesPacket, double actorScale) {
+        for (String attributeKey : List.of("minecraft:scale", "minecraft:generic.scale")) {
+            try {
+                return WrappedAttribute.newBuilder()
+                        .attributeKey(attributeKey)
+                        .baseValue(actorScale)
+                        .packet(attributesPacket)
+                        .build();
+            } catch (RuntimeException ignored) {
+                // Try the legacy key fallback.
+            }
+        }
+
+        return null;
     }
 
     private Location sample(List<ActorFrame> frames, int tick) {
