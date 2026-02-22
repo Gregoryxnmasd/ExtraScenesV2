@@ -37,6 +37,8 @@ public final class ActorPlaybackService {
     private static final int MIN_ENTITY_ID = 200_000;
     private static final int MAX_ENTITY_ID = Integer.MAX_VALUE - 10_000;
 
+    private static final long[] SCALE_RETRY_DELAYS = {1L, 5L, 20L};
+
     private final JavaPlugin plugin;
     private final ProtocolManager protocolManager;
     private final Map<UUID, Map<String, VirtualActor>> spawned = new HashMap<>();
@@ -105,6 +107,11 @@ public final class ActorPlaybackService {
                 continue;
             }
 
+            if (Math.abs(virtualActor.scale() - actor.scale()) > 0.0001D) {
+                sendScaleAttribute(viewer, virtualActor.entityId(), actor.scale());
+                virtualActor.setScale(actor.scale());
+            }
+
             move(viewer, virtualActor, next);
         }
     }
@@ -127,7 +134,7 @@ public final class ActorPlaybackService {
             int entityId = nextEntityId();
             UUID profileId = UUID.randomUUID();
             String profileName = sanitizeProfileName(actor.displayName(), actor.id());
-            VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone());
+            VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone(), actor.scale());
 
             WrappedGameProfile profile = new WrappedGameProfile(profileId, profileName);
             if (actor.skinTexture() != null && actor.skinSignature() != null) {
@@ -144,8 +151,9 @@ public final class ActorPlaybackService {
                 return null;
             }
 
-            sendMetadata(viewer, entityId, actor.scale());
+            sendMetadata(viewer, entityId);
             sendScaleAttribute(viewer, entityId, actor.scale());
+            scheduleScaleRetries(viewer, actor.id(), entityId, actor.scale());
             hideNameTag(viewer, virtualActor);
 
             return virtualActor;
@@ -248,7 +256,7 @@ public final class ActorPlaybackService {
         return legacyInfo != null && sendPacket(viewer, legacyInfo);
     }
 
-    private void sendMetadata(Player viewer, int entityId, double actorScale) {
+    private void sendMetadata(Player viewer, int entityId) {
         PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
         metadata.getIntegers().write(0, entityId);
 
@@ -277,10 +285,6 @@ public final class ActorPlaybackService {
     }
 
     private void sendScaleAttribute(Player viewer, int entityId, double actorScale) {
-        if (Math.abs(actorScale - 1.0D) < 0.0001D) {
-            return;
-        }
-
         try {
             PacketContainer attributesPacket = protocolManager.createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES);
             attributesPacket.getIntegers().write(0, entityId);
@@ -301,6 +305,31 @@ public final class ActorPlaybackService {
         } catch (Throwable ex) {
             // Not all ProtocolLib builds expose attribute wrappers equally.
             plugin.getLogger().fine("Unable to send actor scale attribute: " + ex.getMessage());
+        }
+    }
+
+    private void scheduleScaleRetries(Player viewer, String actorId, int entityId, double actorScale) {
+        UUID viewerId = viewer.getUniqueId();
+        String actorKey = key(actorId);
+        for (long delay : SCALE_RETRY_DELAYS) {
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                Player onlineViewer = plugin.getServer().getPlayer(viewerId);
+                if (onlineViewer == null || !onlineViewer.isOnline()) {
+                    return;
+                }
+
+                Map<String, VirtualActor> actors = spawned.get(viewerId);
+                if (actors == null) {
+                    return;
+                }
+
+                VirtualActor current = actors.get(actorKey);
+                if (current == null || current.entityId() != entityId) {
+                    return;
+                }
+
+                sendScaleAttribute(onlineViewer, entityId, actorScale);
+            }, delay);
         }
     }
 
@@ -509,7 +538,45 @@ public final class ActorPlaybackService {
     }
 
 
-    private record VirtualActor(int entityId, UUID profileId, String profileName, Location location) {
+    private static final class VirtualActor {
+        private final int entityId;
+        private final UUID profileId;
+        private final String profileName;
+        private final Location location;
+        private double scale;
+
+        private VirtualActor(int entityId, UUID profileId, String profileName, Location location, double scale) {
+            this.entityId = entityId;
+            this.profileId = profileId;
+            this.profileName = profileName;
+            this.location = location;
+            this.scale = scale;
+        }
+
+        private int entityId() {
+            return entityId;
+        }
+
+        private UUID profileId() {
+            return profileId;
+        }
+
+        private String profileName() {
+            return profileName;
+        }
+
+        private Location location() {
+            return location;
+        }
+
+        private double scale() {
+            return scale;
+        }
+
+        private void setScale(double scale) {
+            this.scale = scale;
+        }
+
         private String teamId() {
             return "esv2_" + entityId;
         }

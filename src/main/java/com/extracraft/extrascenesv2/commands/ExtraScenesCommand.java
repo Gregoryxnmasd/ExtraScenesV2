@@ -321,10 +321,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         Double scale = 1.0D;
         if (args.length >= 5) {
-            try {
-                scale = Double.parseDouble(args[4]);
-            } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Escala inválida.");
+            scale = parseScale(args[4]);
+            if (scale == null) {
+                sender.sendMessage(ChatColor.RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
                 return;
             }
         }
@@ -381,13 +380,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        double scale;
-        try {
-            scale = Double.parseDouble(args[4]);
-        } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Escala inválida.");
+        Double parsedScale = parseScale(args[4]);
+        if (parsedScale == null) {
+            sender.sendMessage(ChatColor.RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
             return;
         }
+
+        double scale = parsedScale;
 
         if (!manager.upsertActor(args[2], args[3], actor.displayName(), scale, actor.skinTexture(), actor.skinSignature())) {
             sender.sendMessage(ChatColor.RED + "No se pudo actualizar el scale del actor.");
@@ -395,7 +394,36 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Scale del actor actualizado a " + scale + ".");
+
+        SceneActor updatedActor = manager.getActor(args[2], args[3]);
+        double effectiveScale = updatedActor == null ? scale : updatedActor.scale();
+        if (Math.abs(effectiveScale - scale) > 0.0001D) {
+            sender.sendMessage(ChatColor.YELLOW + "Scale solicitado: " + scale + ", aplicado: " + effectiveScale + " (ajustado al rango permitido).");
+        } else {
+            sender.sendMessage(ChatColor.GREEN + "Scale del actor actualizado a " + effectiveScale + ".");
+        }
+    }
+
+
+    private Double parseScale(String rawScale) {
+        if (rawScale == null) {
+            return null;
+        }
+
+        String normalized = rawScale.trim().replace(',', '.');
+        if (normalized.isEmpty()) {
+            return null;
+        }
+
+        try {
+            double value = Double.parseDouble(normalized);
+            if (!Double.isFinite(value)) {
+                return null;
+            }
+            return value;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private SkinData fetchSkinByName(String username) {
