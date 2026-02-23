@@ -5,6 +5,7 @@ com\extrascenesv2\ExtraScenesPlugin.class
 com\extracraft\extrascenesv2\commands\ExtraScenesCommand$RecordingState.class
 com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService.class
 com\extrascenesv2\SceneCommandExecutor.class
+com\extracraft\extrascenesv2\cinematics\ActorPlaybackService$VirtualActor.class
 com\extracraft\extrascenesv2\cinematics\ActorPlaybackService.class
 com\extracraft\extrascenesv2\commands\ExtraScenesCommand.class
 com\extracraft\extrascenesv2\cinematics\CinematicPoint$InterpolationMode.class
