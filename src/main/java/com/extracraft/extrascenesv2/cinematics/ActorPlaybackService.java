@@ -37,6 +37,8 @@ public final class ActorPlaybackService {
     private static final double RELATIVE_MOVE_THRESHOLD = 7.9D;
     private static final int MIN_ENTITY_ID = 200_000;
     private static final int MAX_ENTITY_ID = Integer.MAX_VALUE - 10_000;
+    private static final String PLAYER_SKIN_MODE_TEXTURE = "__viewer_player_skin__";
+    private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
 
     private static final long[] SCALE_RETRY_DELAYS = {1L, 5L, 20L};
     private static final List<String> SCALE_ATTRIBUTE_KEYS = List.of(
@@ -145,9 +147,7 @@ public final class ActorPlaybackService {
             VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone(), actor.scale(), initialFrame.headYaw(), initialFrame.pose());
 
             WrappedGameProfile profile = new WrappedGameProfile(profileId, profileName);
-            if (actor.skinTexture() != null && actor.skinSignature() != null) {
-                profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
-            }
+            applySkinProperties(viewer, actor, profile);
 
             if (!sendAddPlayerInfo(viewer, profileId, profile, actor.displayName())) {
                 return null;
@@ -170,6 +170,39 @@ public final class ActorPlaybackService {
             plugin.getLogger().warning("Unable to spawn actor '" + actor.id() + "' for " + viewer.getName() + ": " + ex.getMessage());
             return null;
         }
+    }
+
+    private void applySkinProperties(Player viewer, SceneActor actor, WrappedGameProfile profile) {
+        if (profile == null || profile.getProperties() == null) {
+            return;
+        }
+
+        if (isViewerSkinMode(actor)) {
+            WrappedGameProfile viewerProfile = WrappedGameProfile.fromPlayer(viewer);
+            if (viewerProfile == null || viewerProfile.getProperties() == null) {
+                return;
+            }
+            Collection<WrappedSignedProperty> textures = viewerProfile.getProperties().get("textures");
+            if (textures == null || textures.isEmpty()) {
+                return;
+            }
+            WrappedSignedProperty viewerTexture = textures.iterator().next();
+            if (viewerTexture == null || viewerTexture.getValue() == null || viewerTexture.getValue().isBlank()) {
+                return;
+            }
+            profile.getProperties().put("textures", new WrappedSignedProperty("textures", viewerTexture.getValue(), viewerTexture.getSignature()));
+            return;
+        }
+
+        if (actor.skinTexture() != null && actor.skinSignature() != null) {
+            profile.getProperties().put("textures", new WrappedSignedProperty("textures", actor.skinTexture(), actor.skinSignature()));
+        }
+    }
+
+    private boolean isViewerSkinMode(SceneActor actor) {
+        return actor != null
+                && PLAYER_SKIN_MODE_TEXTURE.equals(actor.skinTexture())
+                && PLAYER_SKIN_MODE_SIGNATURE.equals(actor.skinSignature());
     }
 
     private void move(Player viewer, VirtualActor actor, ActorFrame targetFrame) {
