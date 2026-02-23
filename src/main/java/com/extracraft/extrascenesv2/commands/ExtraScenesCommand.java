@@ -28,12 +28,12 @@ import java.util.regex.Pattern;
 >>>>>>> Stashed changes
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -44,6 +44,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
+
+    private static final String C_RED = "§c";
+    private static final String C_GREEN = "§a";
+    private static final String C_YELLOW = "§e";
+    private static final String C_GOLD = "§6";
+    private static final String C_GRAY = "§7";
+    private static final String C_AQUA = "§b";
+    private static final String C_DARK_AQUA = "§3";
 
     private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
@@ -90,7 +98,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "show" -> handleShow(sender, args);
             case "reload" -> {
                 manager.load();
-                sender.sendMessage(ChatColor.GREEN + "Scenes reloaded from config.yml.");
+                sender.sendMessage(C_GREEN + "Scenes reloaded from config.yml.");
             }
             default -> sendHelp(sender, label);
         }
@@ -99,7 +107,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleCreate(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes create <scene> <durationTicks>");
+            sender.sendMessage(C_RED + "Usage: /scenes create <scene> <durationTicks>");
             return;
         }
 
@@ -107,55 +115,55 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         try {
             durationTicks = Math.max(1, Integer.parseInt(args[2]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "durationTicks must be an integer > 0.");
+            sender.sendMessage(C_RED + "durationTicks must be an integer > 0.");
             return;
         }
 
         if (!manager.createCinematic(args[1], durationTicks)) {
-            sender.sendMessage(ChatColor.RED + "A scene with that ID already exists.");
+            sender.sendMessage(C_RED + "A scene with that ID already exists.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Scene created: " + args[1] + " (" + durationTicks + "t)");
+        sender.sendMessage(C_GREEN + "Scene created: " + args[1] + " (" + durationTicks + "t)");
     }
 
     private void handleEdit(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes edit <scene>");
+            sender.sendMessage(C_RED + "Usage: /scenes edit <scene>");
             return;
         }
 
         Cinematic scene = manager.getCinematic(args[1]).orElse(null);
         if (scene == null) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
-        sender.sendMessage(ChatColor.GOLD + "Edit wizard for '" + scene.getId() + "':");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|instant]");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|instant]");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes key list " + scene.getId() + " [page]");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
-        sender.sendMessage(ChatColor.YELLOW + "- /scenes tickcmd add " + scene.getId() + " <tick> <command>");
+        sender.sendMessage(C_GOLD + "Edit wizard for '" + scene.getId() + "':");
+        sender.sendMessage(C_YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|instant]");
+        sender.sendMessage(C_YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|instant]");
+        sender.sendMessage(C_YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
+        sender.sendMessage(C_YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
+        sender.sendMessage(C_YELLOW + "- /scenes key list " + scene.getId() + " [page]");
+        sender.sendMessage(C_YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
+        sender.sendMessage(C_YELLOW + "- /scenes tickcmd add " + scene.getId() + " <tick> <command>");
     }
 
     private void handlePlay(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes play <scene> [startTick] [endTick]");
+            sender.sendMessage(C_RED + "Usage: /scenes play <scene> [startTick] [endTick]");
             return;
         }
 
         Cinematic cinematic = manager.getCinematic(args[1]).orElse(null);
         if (cinematic == null) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use /scenes play.");
+            sender.sendMessage(C_RED + "Only players can use /scenes play.");
             return;
         }
 
@@ -166,7 +174,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 startTick = Math.max(0, Integer.parseInt(args[2]));
             } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Invalid startTick.");
+                sender.sendMessage(C_RED + "Invalid startTick.");
                 return;
             }
         }
@@ -175,41 +183,41 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 endTick = Math.max(startTick, Integer.parseInt(args[3]));
             } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Invalid endTick.");
+                sender.sendMessage(C_RED + "Invalid endTick.");
                 return;
             }
         }
 
         if (!playbackService.play(player, cinematic, startTick, endTick)) {
-            sender.sendMessage(ChatColor.RED + "This scene has no keyframes.");
+            sender.sendMessage(C_RED + "This scene has no keyframes.");
             return;
         }
 
-        sender.sendMessage(ChatColor.GREEN + "Playing scene '" + cinematic.getId() + "'.");
+        sender.sendMessage(C_GREEN + "Playing scene '" + cinematic.getId() + "'.");
     }
 
     private void handleStop(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use /scenes stop.");
+            sender.sendMessage(C_RED + "Only players can use /scenes stop.");
             return;
         }
 
         if (!playbackService.stop(player)) {
-            sender.sendMessage(ChatColor.RED + "You are not playing any scene.");
+            sender.sendMessage(C_RED + "You are not playing any scene.");
             return;
         }
 
-        sender.sendMessage(ChatColor.GREEN + "Scene stopped.");
+        sender.sendMessage(C_GREEN + "Scene stopped.");
     }
 
     private void handleRecord(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can record scenes.");
+            sender.sendMessage(C_RED + "Only players can record scenes.");
             return;
         }
 
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes record <start|stop|clear>");
+            sender.sendMessage(C_RED + "Usage: /scenes record <start|stop|clear>");
             return;
         }
 
@@ -217,19 +225,19 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "start" -> handleRecordStart(player, args);
             case "stop" -> handleRecordStop(player);
             case "clear" -> handleRecordClear(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes record <start|stop|clear>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes record <start|stop|clear>");
         }
     }
 
     private void handleRecordStart(Player player, String[] args) {
         if (args.length < 3) {
-            player.sendMessage(ChatColor.RED + "Usage: /scenes record start <scene> [everyTicks] [duration:10s|200t]");
+            player.sendMessage(C_RED + "Usage: /scenes record start <scene> [everyTicks] [duration:10s|200t]");
             return;
         }
 
         Cinematic cinematic = manager.getCinematic(args[2]).orElse(null);
         if (cinematic == null) {
-            player.sendMessage(ChatColor.RED + "That scene does not exist.");
+            player.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
@@ -240,7 +248,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 everyTicks = Math.max(1, Integer.parseInt(args[3]));
             } catch (NumberFormatException ex) {
-                player.sendMessage(ChatColor.RED + "Invalid everyTicks.");
+                player.sendMessage(C_RED + "Invalid everyTicks.");
                 return;
             }
         }
@@ -248,7 +256,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (args.length >= 5) {
             Integer parsed = parseDurationTicks(args[4]);
             if (parsed == null) {
-                player.sendMessage(ChatColor.RED + "Invalid duration. Use 10s or 200t.");
+                player.sendMessage(C_RED + "Invalid duration. Use 10s or 200t.");
                 return;
             }
             maxTicks = parsed;
@@ -266,7 +274,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
             if (state.currentTick > state.maxTicks) {
                 stopAndRemoveRecording(player.getUniqueId());
-                current.sendMessage(ChatColor.GREEN + "Recording finished at " + state.currentTick + " ticks.");
+                current.sendMessage(C_GREEN + "Recording finished at " + state.currentTick + " ticks.");
                 manager.save();
                 return;
             }
@@ -276,37 +284,37 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }, 0L, everyTicks);
 
         recordings.put(player.getUniqueId(), state);
-        player.sendMessage(ChatColor.GREEN + "Recording started on scene '" + args[2] + "'.");
+        player.sendMessage(C_GREEN + "Recording started on scene '" + args[2] + "'.");
     }
 
     private void handleRecordStop(Player player) {
         if (!stopAndRemoveRecording(player.getUniqueId())) {
-            player.sendMessage(ChatColor.RED + "There is no active recording.");
+            player.sendMessage(C_RED + "There is no active recording.");
             return;
         }
 
         manager.save();
-        player.sendMessage(ChatColor.GREEN + "Recording stopped.");
+        player.sendMessage(C_GREEN + "Recording stopped.");
     }
 
     private void handleRecordClear(CommandSender sender, String[] args) {
         if (args.length < 5 || !"confirm".equalsIgnoreCase(args[4])) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes record clear <scene> confirm");
+            sender.sendMessage(C_RED + "Usage: /scenes record clear <scene> confirm");
             return;
         }
 
         if (!manager.clearPoints(args[3])) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Keyframes removed for " + args[3] + ".");
+        sender.sendMessage(C_GREEN + "Keyframes removed for " + args[3] + ".");
     }
 
     private void handleActor(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|scale|window|record>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|record>");
             return;
         }
 
@@ -316,13 +324,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "scale" -> handleActorScale(sender, args);
             case "window" -> handleActorWindow(sender, args);
             case "record" -> handleActorRecord(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes actor <create|skin|scale|window|record>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|record>");
         }
     }
 
     private void handleActorCreate(CommandSender sender, String[] args) {
         if (args.length < 4) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor create <scene> <actorId> [scale]");
+            sender.sendMessage(C_RED + "Usage: /scenes actor create <scene> <actorId> [scale]");
             return;
         }
 
@@ -330,28 +338,28 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (args.length >= 5) {
             scale = parseScale(args[4]);
             if (scale == null) {
-                sender.sendMessage(ChatColor.RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
+                sender.sendMessage(C_RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
                 return;
             }
         }
 
         if (!manager.upsertActor(args[2], args[3], args[3], scale, null, null)) {
-            sender.sendMessage(ChatColor.RED + "No existe esa escena.");
+            sender.sendMessage(C_RED + "No existe esa escena.");
             return;
         }
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Actor guardado.");
+        sender.sendMessage(C_GREEN + "Actor guardado.");
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
         if (args.length != 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName>");
             return;
         }
 
         SceneActor actor = manager.getActor(args[2], args[3]);
         if (actor == null) {
-            sender.sendMessage(ChatColor.RED + "Actor no existe. Créalo primero.");
+            sender.sendMessage(C_RED + "Actor no existe. Créalo primero.");
             return;
         }
 
@@ -365,7 +373,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         } else {
             SkinData skinData = fetchSkinByName(input);
             if (skinData == null) {
-                sender.sendMessage(ChatColor.RED + "No se pudo resolver la skin premium de ese usuario.");
+                sender.sendMessage(C_RED + "No se pudo resolver la skin premium de ese usuario.");
                 return;
             }
             texture = skinData.texture();
@@ -373,15 +381,15 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), texture, signature)) {
-            sender.sendMessage(ChatColor.RED + "No se pudo actualizar skin.");
+            sender.sendMessage(C_RED + "No se pudo actualizar skin.");
             return;
         }
         manager.save();
 
         if ("player".equalsIgnoreCase(input)) {
-            sender.sendMessage(ChatColor.GREEN + "Skin del actor configurada para usar la skin del jugador espectador.");
+            sender.sendMessage(C_GREEN + "Skin del actor configurada para usar la skin del jugador espectador.");
         } else {
-            sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada para " + input + ".");
+            sender.sendMessage(C_GREEN + "Skin del actor guardada para " + input + ".");
         }
     }
 
@@ -442,26 +450,26 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActorScale(CommandSender sender, String[] args) {
         if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor scale <scene> <actorId> <scale>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor scale <scene> <actorId> <scale>");
             return;
         }
 
         SceneActor actor = manager.getActor(args[2], args[3]);
         if (actor == null) {
-            sender.sendMessage(ChatColor.RED + "Actor no existe. Créalo primero.");
+            sender.sendMessage(C_RED + "Actor no existe. Créalo primero.");
             return;
         }
 
         Double parsedScale = parseScale(args[4]);
         if (parsedScale == null) {
-            sender.sendMessage(ChatColor.RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
+            sender.sendMessage(C_RED + "Escala inválida. Usa un número entre 0.0625 y 16 (soporta coma o punto).");
             return;
         }
 
         double scale = parsedScale;
 
         if (!manager.upsertActor(args[2], args[3], actor.displayName(), scale, actor.skinTexture(), actor.skinSignature())) {
-            sender.sendMessage(ChatColor.RED + "No se pudo actualizar el scale del actor.");
+            sender.sendMessage(C_RED + "No se pudo actualizar el scale del actor.");
             return;
         }
 
@@ -470,9 +478,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         SceneActor updatedActor = manager.getActor(args[2], args[3]);
         double effectiveScale = updatedActor == null ? scale : updatedActor.scale();
         if (Math.abs(effectiveScale - scale) > 0.0001D) {
-            sender.sendMessage(ChatColor.YELLOW + "Scale solicitado: " + scale + ", aplicado: " + effectiveScale + " (ajustado al rango permitido).");
+            sender.sendMessage(C_YELLOW + "Scale solicitado: " + scale + ", aplicado: " + effectiveScale + " (ajustado al rango permitido).");
         } else {
-            sender.sendMessage(ChatColor.GREEN + "Scale del actor actualizado a " + effectiveScale + ".");
+            sender.sendMessage(C_GREEN + "Scale del actor actualizado a " + effectiveScale + ".");
         }
     }
 
@@ -500,7 +508,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActorWindow(CommandSender sender, String[] args) {
         if (args.length < 6) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
             return;
         }
 
@@ -510,26 +518,26 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             appearTick = Math.max(0, Integer.parseInt(args[4]));
             disappearTick = Math.max(appearTick, Integer.parseInt(args[5]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Ticks inválidos.");
+            sender.sendMessage(C_RED + "Ticks inválidos.");
             return;
         }
 
         if (!manager.setActorWindow(args[2], args[3], appearTick, disappearTick)) {
-            sender.sendMessage(ChatColor.RED + "Actor o escena inválidos.");
+            sender.sendMessage(C_RED + "Actor o escena inválidos.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Ventana del actor actualizada: " + appearTick + " -> " + disappearTick + ".");
+        sender.sendMessage(C_GREEN + "Ventana del actor actualizada: " + appearTick + " -> " + disappearTick + ".");
     }
 
     private void handleActorRecord(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Solo jugadores.");
+            sender.sendMessage(C_RED + "Solo jugadores.");
             return;
         }
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor record <start|stop>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor record <start|stop>");
             return;
         }
         if (args[2].equalsIgnoreCase("stop")) {
@@ -537,19 +545,19 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (!args[2].equalsIgnoreCase("start") || args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor record start <scene> <actorId> [duration]");
+            sender.sendMessage(C_RED + "Usage: /scenes actor record start <scene> <actorId> [duration]");
             return;
         }
 
         SceneActor actor = manager.getActor(args[3], args[4]);
         if (actor == null) {
-            player.sendMessage(ChatColor.RED + "Actor o escena inválidos.");
+            player.sendMessage(C_RED + "Actor o escena inválidos.");
             return;
         }
 
         Integer duration = args.length >= 6 ? parseDurationTicks(args[5]) : null;
         if (args.length >= 6 && duration == null) {
-            player.sendMessage(ChatColor.RED + "Duración inválida.");
+            player.sendMessage(C_RED + "Duración inválida.");
             return;
         }
 
@@ -559,12 +567,12 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         giveSaveRecorderItem(player);
         manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0, state.actorId));
 
-        player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "3")));
+        player.showTitle(Title.title(Component.text(C_YELLOW + "Recording actor en"), Component.text(C_GOLD + "3")));
         state.countdownTaskTwo = Bukkit.getScheduler().runTaskLater(plugin,
-                () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "2"))),
+                () -> player.showTitle(Title.title(Component.text(C_YELLOW + "Recording actor en"), Component.text(C_GOLD + "2"))),
                 20L);
         state.countdownTaskOne = Bukkit.getScheduler().runTaskLater(plugin,
-                () -> player.showTitle(Title.title(Component.text(ChatColor.YELLOW + "Recording actor en"), Component.text(ChatColor.GOLD + "1"))),
+                () -> player.showTitle(Title.title(Component.text(C_YELLOW + "Recording actor en"), Component.text(C_GOLD + "1"))),
                 40L);
         state.startTask = Bukkit.getScheduler().runTaskLater(plugin, () -> startActorRecordingTask(player, state), 60L);
     }
@@ -586,7 +594,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
-            online.sendActionBar(Component.text(ChatColor.AQUA + "Recording actor " + state.actorId + ChatColor.GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
+            online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
         }, 0L, 1L);
     }
@@ -596,22 +604,27 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return false;
         }
         ItemMeta meta = item.getItemMeta();
-        return meta != null && meta.hasDisplayName() && meta.getDisplayName().contains("Guardar recording actor");
+        if (meta == null || meta.displayName() == null) {
+            return false;
+        }
+
+        String plainName = PlainTextComponentSerializer.plainText().serialize(meta.displayName());
+        return plainName.contains("Guardar recording actor");
     }
 
     public void saveActorRecording(Player player) {
         ActorRecordingState state = actorRecordings.get(player.getUniqueId());
         if (state == null) {
-            player.sendMessage(ChatColor.RED + "No estás grabando un actor.");
+            player.sendMessage(C_RED + "No estás grabando un actor.");
             return;
         }
         if (!manager.saveActorFrames(state.sceneId, state.actorId, state.frames)) {
-            player.sendMessage(ChatColor.RED + "No se pudo guardar el recording del actor.");
+            player.sendMessage(C_RED + "No se pudo guardar el recording del actor.");
             return;
         }
         manager.save();
         stopActorRecording(player.getUniqueId());
-        player.sendMessage(ChatColor.GREEN + "Recording guardado para actor " + state.actorId + ".");
+        player.sendMessage(C_GREEN + "Recording guardado para actor " + state.actorId + ".");
     }
 
     public void stopActorRecording(UUID playerId) {
@@ -646,7 +659,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         ItemStack item = new ItemStack(Material.LIME_DYE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.GREEN + "Guardar recording actor (click)");
+            meta.displayName(Component.text("Guardar recording actor (click)"));
             item.setItemMeta(meta);
         }
         player.getInventory().setItem(8, item);
@@ -654,7 +667,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKey(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
+            sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
             return;
         }
 
@@ -665,18 +678,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "del" -> handleKeyDel(sender, args);
             case "list" -> handleKeyList(sender, args);
             case "clear" -> handleKeyClear(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
         }
     }
 
     private void handleKeyAdd(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use 'here'.");
+            sender.sendMessage(C_RED + "Only players can use 'here'.");
             return;
         }
 
         if (args.length < 5 || !"here".equalsIgnoreCase(args[4])) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key add <scene> <tick> here [smooth|instant]");
+            sender.sendMessage(C_RED + "Usage: /scenes key add <scene> <tick> here [smooth|instant]");
             return;
         }
 
@@ -684,28 +697,28 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         try {
             tick = Math.max(0, Integer.parseInt(args[3]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid tick.");
+            sender.sendMessage(C_RED + "Invalid tick.");
             return;
         }
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 6 ? args[5] : null);
         if (interpolationMode == null) {
-            sender.sendMessage(ChatColor.RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
             return;
         }
 
         if (!manager.upsertPoint(args[2], tick, player.getLocation(), interpolationMode)) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Keyframe saved at tick " + tick + ".");
+        sender.sendMessage(C_GREEN + "Keyframe saved at tick " + tick + ".");
     }
 
     private void handleKeySet(CommandSender sender, String[] args) {
         if (args.length < 9) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
+            sender.sendMessage(C_RED + "Usage: /scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
             return;
         }
 
@@ -724,34 +737,34 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             yaw = Float.parseFloat(args[7]);
             pitch = Float.parseFloat(args[8]);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid numeric values.");
+            sender.sendMessage(C_RED + "Invalid numeric values.");
             return;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use this command (your current world is used).");
+            sender.sendMessage(C_RED + "Only players can use this command (your current world is used).");
             return;
         }
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 10 ? args[9] : null);
         if (interpolationMode == null) {
-            sender.sendMessage(ChatColor.RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
             return;
         }
 
         Location location = new Location(player.getWorld(), x, y, z, yaw, pitch);
         if (!manager.upsertPoint(args[2], tick, location, interpolationMode)) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Keyframe updated at tick " + tick + ".");
+        sender.sendMessage(C_GREEN + "Keyframe updated at tick " + tick + ".");
     }
 
     private void handleKeyDel(CommandSender sender, String[] args) {
         if (args.length < 4) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key del <scene> <tick>");
+            sender.sendMessage(C_RED + "Usage: /scenes key del <scene> <tick>");
             return;
         }
 
@@ -759,22 +772,22 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         try {
             tick = Math.max(0, Integer.parseInt(args[3]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid tick.");
+            sender.sendMessage(C_RED + "Invalid tick.");
             return;
         }
 
         if (!manager.deletePoint(args[2], tick)) {
-            sender.sendMessage(ChatColor.RED + "Scene does not exist or there is no keyframe at that tick.");
+            sender.sendMessage(C_RED + "Scene does not exist or there is no keyframe at that tick.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Keyframe removed at tick " + tick + ".");
+        sender.sendMessage(C_GREEN + "Keyframe removed at tick " + tick + ".");
     }
 
     private void handleKeyMode(CommandSender sender, String[] args) {
         if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key mode <scene> <tick> <smooth|instant>");
+            sender.sendMessage(C_RED + "Usage: /scenes key mode <scene> <tick> <smooth|instant>");
             return;
         }
 
@@ -782,35 +795,35 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         try {
             tick = Math.max(0, Integer.parseInt(args[3]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid tick.");
+            sender.sendMessage(C_RED + "Invalid tick.");
             return;
         }
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args[4]);
         if (interpolationMode == null) {
-            sender.sendMessage(ChatColor.RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
             return;
         }
 
         if (!manager.setPointInterpolation(args[2], tick, interpolationMode)) {
-            sender.sendMessage(ChatColor.RED + "Scene does not exist or there is no keyframe at that tick.");
+            sender.sendMessage(C_RED + "Scene does not exist or there is no keyframe at that tick.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Interpolation updated at tick " + tick + " a "
+        sender.sendMessage(C_GREEN + "Interpolation updated at tick " + tick + " a "
             + interpolationMode.name().toLowerCase(Locale.ROOT) + ".");
     }
 
     private void handleKeyList(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key list <scene> [page]");
+            sender.sendMessage(C_RED + "Usage: /scenes key list <scene> [page]");
             return;
         }
 
         Cinematic cinematic = manager.getCinematic(args[2]).orElse(null);
         if (cinematic == null) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
@@ -819,7 +832,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 page = Math.max(1, Integer.parseInt(args[3]));
             } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Invalid page.");
+                sender.sendMessage(C_RED + "Invalid page.");
                 return;
             }
         }
@@ -827,7 +840,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         int perPage = 8;
         List<CinematicPoint> points = cinematic.getPoints();
         if (points.isEmpty()) {
-            sender.sendMessage(ChatColor.YELLOW + "This scene has no keyframes.");
+            sender.sendMessage(C_YELLOW + "This scene has no keyframes.");
             return;
         }
 
@@ -836,11 +849,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         int from = (safePage - 1) * perPage;
         int to = Math.min(points.size(), from + perPage);
 
-        sender.sendMessage(ChatColor.GOLD + "Keyframes for " + cinematic.getId() + " (page " + safePage + "/" + maxPages + "):");
+        sender.sendMessage(C_GOLD + "Keyframes for " + cinematic.getId() + " (page " + safePage + "/" + maxPages + "):");
         for (int i = from; i < to; i++) {
             CinematicPoint point = points.get(i);
             Location loc = point.location();
-            sender.sendMessage(ChatColor.YELLOW + "t=" + point.tick() + ChatColor.GRAY + " ["
+            sender.sendMessage(C_YELLOW + "t=" + point.tick() + C_GRAY + " ["
                 + point.interpolationMode().name().toLowerCase(Locale.ROOT) + "] -> "
                 + String.format(Locale.US, "%.2f %.2f %.2f %.1f %.1f", loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch()));
         }
@@ -848,23 +861,23 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKeyClear(CommandSender sender, String[] args) {
         if (args.length < 4 || !"confirm".equalsIgnoreCase(args[3])) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes key clear <scene> confirm");
+            sender.sendMessage(C_RED + "Usage: /scenes key clear <scene> confirm");
             return;
         }
 
         if (!manager.clearPoints(args[2])) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "All keyframes were removed.");
+        sender.sendMessage(C_GREEN + "All keyframes were removed.");
     }
 
 
     private void handleTickCommand(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd <add|remove|list|clear> ...");
+            sender.sendMessage(C_RED + "Usage: /scenes tickcmd <add|remove|list|clear> ...");
             return;
         }
 
@@ -873,13 +886,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "remove" -> handleTickCommandRemove(sender, args);
             case "list" -> handleTickCommandList(sender, args);
             case "clear" -> handleTickCommandClear(sender, args);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd <add|remove|list|clear> ...");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes tickcmd <add|remove|list|clear> ...");
         }
     }
 
     private void handleTickCommandAdd(CommandSender sender, String[] args) {
         if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd add <scene> <tick> <command>");
+            sender.sendMessage(C_RED + "Usage: /scenes tickcmd add <scene> <tick> <command>");
             return;
         }
 
@@ -887,23 +900,23 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         try {
             tick = Math.max(0, Integer.parseInt(args[3]));
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid tick.");
+            sender.sendMessage(C_RED + "Invalid tick.");
             return;
         }
 
         String command = String.join(" ", Arrays.copyOfRange(args, 4, args.length));
         if (!manager.addTickCommand(args[2], tick, command)) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist or the command is invalid.");
+            sender.sendMessage(C_RED + "That scene does not exist or the command is invalid.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Command added at tick " + tick + ".");
+        sender.sendMessage(C_GREEN + "Command added at tick " + tick + ".");
     }
 
     private void handleTickCommandRemove(CommandSender sender, String[] args) {
         if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd remove <scene> <tick> <index>");
+            sender.sendMessage(C_RED + "Usage: /scenes tickcmd remove <scene> <tick> <index>");
             return;
         }
 
@@ -913,28 +926,28 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             tick = Math.max(0, Integer.parseInt(args[3]));
             index = Integer.parseInt(args[4]);
         } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Invalid tick or index.");
+            sender.sendMessage(C_RED + "Invalid tick or index.");
             return;
         }
 
         if (!manager.removeTickCommand(args[2], tick, index)) {
-            sender.sendMessage(ChatColor.RED + "Could not remove command. Check scene/tick/index.");
+            sender.sendMessage(C_RED + "Could not remove command. Check scene/tick/index.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Command #" + index + " eliminado en tick " + tick + ".");
+        sender.sendMessage(C_GREEN + "Command #" + index + " eliminado en tick " + tick + ".");
     }
 
     private void handleTickCommandList(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd list <scene> [tick]");
+            sender.sendMessage(C_RED + "Usage: /scenes tickcmd list <scene> [tick]");
             return;
         }
 
         Cinematic cinematic = manager.getCinematic(args[2]).orElse(null);
         if (cinematic == null) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
@@ -943,37 +956,37 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 tick = Math.max(0, Integer.parseInt(args[3]));
             } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Invalid tick.");
+                sender.sendMessage(C_RED + "Invalid tick.");
                 return;
             }
 
             List<String> commands = cinematic.getTickCommands().getOrDefault(tick, List.of());
             if (commands.isEmpty()) {
-                sender.sendMessage(ChatColor.YELLOW + "There are no commands at tick " + tick + ".");
+                sender.sendMessage(C_YELLOW + "There are no commands at tick " + tick + ".");
                 return;
             }
 
-            sender.sendMessage(ChatColor.GOLD + "Commands at tick " + tick + " (" + cinematic.getId() + "):");
+            sender.sendMessage(C_GOLD + "Commands at tick " + tick + " (" + cinematic.getId() + "):");
             for (int i = 0; i < commands.size(); i++) {
-                sender.sendMessage(ChatColor.YELLOW + "#" + (i + 1) + ChatColor.GRAY + " " + commands.get(i));
+                sender.sendMessage(C_YELLOW + "#" + (i + 1) + C_GRAY + " " + commands.get(i));
             }
             return;
         }
 
         if (cinematic.getTickCommands().isEmpty()) {
-            sender.sendMessage(ChatColor.YELLOW + "This scene has no per-tick commands.");
+            sender.sendMessage(C_YELLOW + "This scene has no per-tick commands.");
             return;
         }
 
-        sender.sendMessage(ChatColor.GOLD + "Ticks with commands in '" + cinematic.getId() + "':");
+        sender.sendMessage(C_GOLD + "Ticks with commands in '" + cinematic.getId() + "':");
         for (Map.Entry<Integer, List<String>> entry : cinematic.getTickCommands().entrySet()) {
-            sender.sendMessage(ChatColor.YELLOW + "Tick " + entry.getKey() + ChatColor.GRAY + " -> " + entry.getValue().size() + " command(s)");
+            sender.sendMessage(C_YELLOW + "Tick " + entry.getKey() + C_GRAY + " -> " + entry.getValue().size() + " command(s)");
         }
     }
 
     private void handleTickCommandClear(CommandSender sender, String[] args) {
         if (args.length < 4) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes tickcmd clear <scene> <all|tick>");
+            sender.sendMessage(C_RED + "Usage: /scenes tickcmd clear <scene> <all|tick>");
             return;
         }
 
@@ -982,47 +995,47 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             try {
                 tick = Math.max(0, Integer.parseInt(args[3]));
             } catch (NumberFormatException ex) {
-                sender.sendMessage(ChatColor.RED + "Use all or a valid tick.");
+                sender.sendMessage(C_RED + "Use all or a valid tick.");
                 return;
             }
         }
 
         if (!manager.clearTickCommands(args[2], tick)) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + (tick == null
+        sender.sendMessage(C_GREEN + (tick == null
                 ? "All per-tick commands were removed."
                 : "Commands removed at tick " + tick + "."));
     }
 
     private void handlePlaceholders(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "Placeholders disponibles de PlaceholderAPI:");
-        sender.sendMessage(ChatColor.GRAY + "Formato general: %scenes_<placeholder>%");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_playing%" + ChatColor.GRAY + " true/false si el jugador está en una escena");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_current_scene%" + ChatColor.GRAY + " id de la escena actual (o none)");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_current_tick%" + ChatColor.GRAY + " tick actual de reproducción");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_end_tick%" + ChatColor.GRAY + " tick final del tramo actual");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_progress_percent%" + ChatColor.GRAY + " progreso de la escena actual (0-100)");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_count%" + ChatColor.GRAY + " cantidad de escenas vistas por el jugador");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_list%" + ChatColor.GRAY + " lista de escenas vistas separada por comas");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<scene>%" + ChatColor.GRAY + " true/false si el jugador vio esa escena");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_played_<scene>_<player>%" + ChatColor.GRAY + " versión para otro jugador");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_duration_<scene>%" + ChatColor.GRAY + " duración total en ticks");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_points_<scene>%" + ChatColor.GRAY + " cantidad de keyframes");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_commands_<scene>%" + ChatColor.GRAY + " cantidad de comandos por tick");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_scenes_count%" + ChatColor.GRAY + " total de escenas cargadas");
-        sender.sendMessage(ChatColor.YELLOW + "%scenes_scenes_list%" + ChatColor.GRAY + " ids de escenas cargadas separadas por comas");
-        sender.sendMessage(ChatColor.DARK_AQUA + "También puedes usar placeholders internos en tickcmd (no PAPI):");
-        sender.sendMessage(ChatColor.YELLOW + "{player} {player_display_name} {player_uuid} {scene} {tick}");
-        sender.sendMessage(ChatColor.YELLOW + "{world} {x} {y} {z} {yaw} {pitch}");
+        sender.sendMessage(C_GOLD + "Placeholders disponibles de PlaceholderAPI:");
+        sender.sendMessage(C_GRAY + "Formato general: %scenes_<placeholder>%");
+        sender.sendMessage(C_YELLOW + "%scenes_playing%" + C_GRAY + " true/false si el jugador está en una escena");
+        sender.sendMessage(C_YELLOW + "%scenes_current_scene%" + C_GRAY + " id de la escena actual (o none)");
+        sender.sendMessage(C_YELLOW + "%scenes_current_tick%" + C_GRAY + " tick actual de reproducción");
+        sender.sendMessage(C_YELLOW + "%scenes_end_tick%" + C_GRAY + " tick final del tramo actual");
+        sender.sendMessage(C_YELLOW + "%scenes_progress_percent%" + C_GRAY + " progreso de la escena actual (0-100)");
+        sender.sendMessage(C_YELLOW + "%scenes_played_count%" + C_GRAY + " cantidad de escenas vistas por el jugador");
+        sender.sendMessage(C_YELLOW + "%scenes_played_list%" + C_GRAY + " lista de escenas vistas separada por comas");
+        sender.sendMessage(C_YELLOW + "%scenes_played_<scene>%" + C_GRAY + " true/false si el jugador vio esa escena");
+        sender.sendMessage(C_YELLOW + "%scenes_played_<scene>_<player>%" + C_GRAY + " versión para otro jugador");
+        sender.sendMessage(C_YELLOW + "%scenes_duration_<scene>%" + C_GRAY + " duración total en ticks");
+        sender.sendMessage(C_YELLOW + "%scenes_points_<scene>%" + C_GRAY + " cantidad de keyframes");
+        sender.sendMessage(C_YELLOW + "%scenes_commands_<scene>%" + C_GRAY + " cantidad de comandos por tick");
+        sender.sendMessage(C_YELLOW + "%scenes_scenes_count%" + C_GRAY + " total de escenas cargadas");
+        sender.sendMessage(C_YELLOW + "%scenes_scenes_list%" + C_GRAY + " ids de escenas cargadas separadas por comas");
+        sender.sendMessage(C_DARK_AQUA + "También puedes usar placeholders internos en tickcmd (no PAPI):");
+        sender.sendMessage(C_YELLOW + "{player} {player_display_name} {player_uuid} {scene} {tick}");
+        sender.sendMessage(C_YELLOW + "{world} {x} {y} {z} {yaw} {pitch}");
     }
 
     private void handleFinish(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes finish <scene> <return|stay|teleport_here|teleport>");
+            sender.sendMessage(C_RED + "Usage: /scenes finish <scene> <return|stay|teleport_here|teleport>");
             return;
         }
 
@@ -1035,20 +1048,20 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "stay" -> endAction = Cinematic.EndAction.stayAtLastCameraPoint();
             case "teleport_here" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage(ChatColor.RED + "Only players can use teleport_here.");
+                    sender.sendMessage(C_RED + "Only players can use teleport_here.");
                     return;
                 }
                 endAction = Cinematic.EndAction.teleportTo(player.getLocation());
             }
             case "teleport" -> {
                 if (args.length < 9) {
-                    sender.sendMessage(ChatColor.RED + "Usage: /scenes finish <scene> teleport <world> <x> <y> <z> <yaw> <pitch>");
+                    sender.sendMessage(C_RED + "Usage: /scenes finish <scene> teleport <world> <x> <y> <z> <yaw> <pitch>");
                     return;
                 }
 
                 World world = Bukkit.getWorld(args[3]);
                 if (world == null) {
-                    sender.sendMessage(ChatColor.RED + "Invalid world: " + args[3]);
+                    sender.sendMessage(C_RED + "Invalid world: " + args[3]);
                     return;
                 }
 
@@ -1064,88 +1077,88 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     yaw = Float.parseFloat(args[7]);
                     pitch = Float.parseFloat(args[8]);
                 } catch (NumberFormatException ex) {
-                    sender.sendMessage(ChatColor.RED + "Invalid coordinates.");
+                    sender.sendMessage(C_RED + "Invalid coordinates.");
                     return;
                 }
 
                 endAction = Cinematic.EndAction.teleportTo(new Location(world, x, y, z, yaw, pitch));
             }
             default -> {
-                sender.sendMessage(ChatColor.RED + "Invalid mode. Use return, stay, teleport_here or teleport.");
+                sender.sendMessage(C_RED + "Invalid mode. Use return, stay, teleport_here or teleport.");
                 return;
             }
         }
 
         if (!manager.setEndAction(sceneId, endAction)) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Comportamiento final actualizado para '" + sceneId + "'.");
+        sender.sendMessage(C_GREEN + "Comportamiento final actualizado para '" + sceneId + "'.");
     }
 
     private void handleDelete(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes delete <scene>");
+            sender.sendMessage(C_RED + "Usage: /scenes delete <scene>");
             return;
         }
         if (!manager.deleteCinematic(args[1])) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Scene deleted: " + args[1]);
+        sender.sendMessage(C_GREEN + "Scene deleted: " + args[1]);
     }
 
     private void handleList(CommandSender sender) {
         List<String> ids = manager.getCinematicIds();
         if (ids.isEmpty()) {
-            sender.sendMessage(ChatColor.YELLOW + "No scenes have been created.");
+            sender.sendMessage(C_YELLOW + "No scenes have been created.");
             return;
         }
-        sender.sendMessage(ChatColor.GOLD + "Scenes: " + ChatColor.YELLOW + String.join(", ", ids));
+        sender.sendMessage(C_GOLD + "Scenes: " + C_YELLOW + String.join(", ", ids));
     }
 
     private void handleShow(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes show <scene>");
+            sender.sendMessage(C_RED + "Usage: /scenes show <scene>");
             return;
         }
         Cinematic cinematic = manager.getCinematic(args[1]).orElse(null);
         if (cinematic == null) {
-            sender.sendMessage(ChatColor.RED + "That scene does not exist.");
+            sender.sendMessage(C_RED + "That scene does not exist.");
             return;
         }
 
-        sender.sendMessage(ChatColor.GOLD + "Scene " + cinematic.getId() + ChatColor.GRAY + " -> duration " + cinematic.getDurationTicks() + "t, " + cinematic.getPoints().size() + " keyframes");
-        sender.sendMessage(ChatColor.GRAY + "Ending: " + describeEndAction(cinematic.getEndAction()));
+        sender.sendMessage(C_GOLD + "Scene " + cinematic.getId() + C_GRAY + " -> duration " + cinematic.getDurationTicks() + "t, " + cinematic.getPoints().size() + " keyframes");
+        sender.sendMessage(C_GRAY + "Ending: " + describeEndAction(cinematic.getEndAction()));
     }
 
     private void sendHelp(CommandSender sender, String label) {
-        sender.sendMessage(ChatColor.GOLD + "ExtraScenesV2 - commands /" + label + ":");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes create <scene> <durationTicks>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes edit <scene>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes play <scene> [startTick] [endTick]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes stop");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> [scale]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor record stop");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key del <scene> <tick>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key list <scene> [page]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes key clear <scene> confirm");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes placeholders");
+        sender.sendMessage(C_GOLD + "ExtraScenesV2 - commands /" + label + ":");
+        sender.sendMessage(C_YELLOW + "/scenes create <scene> <durationTicks>");
+        sender.sendMessage(C_YELLOW + "/scenes edit <scene>");
+        sender.sendMessage(C_YELLOW + "/scenes play <scene> [startTick] [endTick]");
+        sender.sendMessage(C_YELLOW + "/scenes stop");
+        sender.sendMessage(C_YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
+        sender.sendMessage(C_YELLOW + "/scenes record stop");
+        sender.sendMessage(C_YELLOW + "/scenes record clear <scene> confirm");
+        sender.sendMessage(C_YELLOW + "/scenes actor create <scene> <actorId> [scale]");
+        sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
+        sender.sendMessage(C_YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
+        sender.sendMessage(C_YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
+        sender.sendMessage(C_YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
+        sender.sendMessage(C_YELLOW + "/scenes actor record stop");
+        sender.sendMessage(C_YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
+        sender.sendMessage(C_YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
+        sender.sendMessage(C_YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
+        sender.sendMessage(C_YELLOW + "/scenes key del <scene> <tick>");
+        sender.sendMessage(C_YELLOW + "/scenes key list <scene> [page]");
+        sender.sendMessage(C_YELLOW + "/scenes key clear <scene> confirm");
+        sender.sendMessage(C_YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
+        sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
+        sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
 
     private boolean stopAndRemoveRecording(UUID playerId) {
