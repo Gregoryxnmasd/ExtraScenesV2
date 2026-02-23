@@ -7,10 +7,6 @@ import com.extracraft.extrascenesv2.cinematics.CinematicPoint;
 import com.extracraft.extrascenesv2.cinematics.SceneActor;
 import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,8 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import org.bukkit.inventory.ItemStack;
@@ -1322,9 +1316,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         return new ArrayList<>();
-    }
-
-    private record SkinData(String texture, String signature) {
     }
 
     private static final class ActorRecordingState {
