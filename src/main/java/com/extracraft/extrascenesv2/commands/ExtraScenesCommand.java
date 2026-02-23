@@ -42,9 +42,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
-    private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\s*:\s*\"([a-fA-F0-9]{32})\"");
-    private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\s*:\s*\"([^\"]+)\"");
-    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("\"signature\"\s*:\s*\"([^\"]+)\"");
+    private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
+    private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("\"signature\"\\s*:\\s*\"([^\"]+)\"");
     private static final String PLAYER_SKIN_MODE_TEXTURE = "__viewer_player_skin__";
     private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
 
