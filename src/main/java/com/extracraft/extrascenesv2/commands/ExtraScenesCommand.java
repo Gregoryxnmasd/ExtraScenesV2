@@ -1324,9 +1324,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         return new ArrayList<>();
     }
 
-    private record SkinData(String texture, String signature) {
-    }
-
     private static final class ActorRecordingState {
         private final String sceneId;
         private final String actorId;
@@ -1357,5 +1354,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             this.everyTicks = everyTicks;
             this.maxTicks = Math.max(1, maxTicks);
         }
+    }
+
+    private record SkinData(String texture, String signature) {
     }
 }
