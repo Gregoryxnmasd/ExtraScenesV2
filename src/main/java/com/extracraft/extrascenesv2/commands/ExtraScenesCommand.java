@@ -45,6 +45,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
     private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SIGNATURE_PATTERN = Pattern.compile("\"signature\"\\s*:\\s*\"([^\"]+)\"");
+    private static final String PLAYER_SKIN_MODE_TEXTURE = "__viewer_player_skin__";
+    private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
 
     private final JavaPlugin plugin;
     private final CinematicManager manager;
@@ -337,8 +339,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
-        if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> <playerName|texture> [signature]");
+        if (args.length != 5) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName>");
             return;
         }
 
@@ -348,24 +350,89 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        SkinData skinData;
-        if (args.length >= 6) {
-            skinData = new SkinData(args[4], args[5]);
+        String input = args[4].trim();
+        String texture;
+        String signature;
+
+        if ("player".equalsIgnoreCase(input)) {
+            texture = PLAYER_SKIN_MODE_TEXTURE;
+            signature = PLAYER_SKIN_MODE_SIGNATURE;
         } else {
-            skinData = fetchSkinByName(args[4]);
+            SkinData skinData = fetchSkinByName(input);
             if (skinData == null) {
                 sender.sendMessage(ChatColor.RED + "No se pudo resolver la skin premium de ese usuario.");
-                sender.sendMessage(ChatColor.GRAY + "También puedes usar texture+signature manualmente.");
                 return;
             }
+            texture = skinData.texture();
+            signature = skinData.signature();
         }
 
-        if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), skinData.texture(), skinData.signature())) {
+        if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), texture, signature)) {
             sender.sendMessage(ChatColor.RED + "No se pudo actualizar skin.");
             return;
         }
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
+
+        if ("player".equalsIgnoreCase(input)) {
+            sender.sendMessage(ChatColor.GREEN + "Skin del actor configurada para usar la skin del jugador espectador.");
+        } else {
+            sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada para " + input + ".");
+        }
+    }
+
+    private SkinData fetchSkinByName(String username) {
+        String cleanName = username == null ? "" : username.trim();
+        if (cleanName.isEmpty()) {
+            return null;
+        }
+
+        String uuid = fetchMojangUuid(cleanName);
+        if (uuid == null) {
+            return null;
+        }
+
+        return fetchSessionSkin(uuid);
+    }
+
+    private String fetchMojangUuid(String username) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.mojang.com/users/profiles/minecraft/" + username))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                return null;
+            }
+
+            Matcher matcher = UUID_ID_PATTERN.matcher(response.body());
+            return matcher.find() ? matcher.group(1) : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private SkinData fetchSessionSkin(String uuid) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false"))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                return null;
+            }
+
+            Matcher textureMatcher = TEXTURE_PATTERN.matcher(response.body());
+            Matcher signatureMatcher = SIGNATURE_PATTERN.matcher(response.body());
+            if (!textureMatcher.find() || !signatureMatcher.find()) {
+                return null;
+            }
+
+            return new SkinData(textureMatcher.group(1), signatureMatcher.group(1));
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private void handleActorScale(CommandSender sender, String[] args) {
@@ -425,62 +492,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return null;
         }
     }
-
-    private SkinData fetchSkinByName(String username) {
-        String cleanName = username == null ? "" : username.trim();
-        if (cleanName.isEmpty()) {
-            return null;
-        }
-
-        String uuid = fetchMojangUuid(cleanName);
-        if (uuid == null) {
-            return null;
-        }
-
-        return fetchSessionSkin(uuid);
-    }
-
-    private String fetchMojangUuid(String username) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.mojang.com/users/profiles/minecraft/" + username))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return null;
-            }
-
-            Matcher matcher = UUID_ID_PATTERN.matcher(response.body());
-            return matcher.find() ? matcher.group(1) : null;
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private SkinData fetchSessionSkin(String uuid) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false"))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return null;
-            }
-
-            Matcher textureMatcher = TEXTURE_PATTERN.matcher(response.body());
-            Matcher signatureMatcher = SIGNATURE_PATTERN.matcher(response.body());
-            if (!textureMatcher.find() || !signatureMatcher.find()) {
-                return null;
-            }
-
-            return new SkinData(textureMatcher.group(1), signatureMatcher.group(1));
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
 
     private void handleActorWindow(CommandSender sender, String[] args) {
         if (args.length < 6) {
@@ -1116,7 +1127,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> [scale]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <playerName|texture> [signature]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
@@ -1234,6 +1245,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     .map(cinematic -> cinematic.getActors().values().stream().map(SceneActor::id).filter(id -> id.startsWith(args[3])).toList())
                     .orElse(Collections.emptyList());
         }
+
+        if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin")) {
+            List<String> options = new ArrayList<>();
+            options.add("player");
+            Bukkit.getOnlinePlayers().stream().map(Player::getName).forEach(options::add);
+            return options.stream().filter(option -> option.toLowerCase(Locale.ROOT).startsWith(args[4].toLowerCase(Locale.ROOT))).toList();
+        }
+
 
         if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record") && args[2].equalsIgnoreCase("start")) {
             return manager.getCinematic(args[3])
