@@ -7,23 +7,14 @@ import com.extracraft.extrascenesv2.cinematics.CinematicPoint;
 import com.extracraft.extrascenesv2.cinematics.SceneActor;
 import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
-import com.comphenix.protocol.wrappers.WrappedSignedProperty;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import org.bukkit.inventory.ItemStack;
@@ -44,10 +35,8 @@ import org.bukkit.scheduler.BukkitTask;
 public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
-    private static final HttpClient HTTP = HttpClient.newHttpClient();
-    private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
-    private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
-    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("\"signature\"\\s*:\\s*\"([^\"]+)\"");
+    private static final String PLAYER_SKIN_MODE_TEXTURE = "__viewer_player_skin__";
+    private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
 
     private final JavaPlugin plugin;
     private final CinematicManager manager;
@@ -340,8 +329,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
-        if (args.length < 6 || !"player".equalsIgnoreCase(args[4])) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> player <playerName>");
+        if (args.length < 5 || !"player".equalsIgnoreCase(args[4])) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> player");
             return;
         }
 
@@ -351,67 +340,12 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        SkinData skinData = resolvePlayerSkin(args[5]);
-        if (skinData == null) {
-            sender.sendMessage(ChatColor.RED + "No se pudo resolver la skin para el jugador indicado.");
-            return;
-        }
-
-        if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), skinData.texture(), skinData.signature())) {
+        if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), PLAYER_SKIN_MODE_TEXTURE, PLAYER_SKIN_MODE_SIGNATURE)) {
             sender.sendMessage(ChatColor.RED + "No se pudo actualizar skin.");
             return;
         }
         manager.save();
-        sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
-    }
-
-    private SkinData resolvePlayerSkin(String playerName) {
-        String cleanName = playerName == null ? "" : playerName.trim();
-        if (cleanName.isEmpty()) {
-            return null;
-        }
-
-        Player online = Bukkit.getPlayerExact(cleanName);
-        if (online == null) {
-            for (Player candidate : Bukkit.getOnlinePlayers()) {
-                if (candidate.getName().equalsIgnoreCase(cleanName)) {
-                    online = candidate;
-                    break;
-                }
-            }
-        }
-
-        if (online != null) {
-            SkinData onlineSkin = fetchSkinFromOnlinePlayer(online);
-            if (onlineSkin != null) {
-                return onlineSkin;
-            }
-        }
-
-        return fetchSkinByName(cleanName);
-    }
-
-    private SkinData fetchSkinFromOnlinePlayer(Player player) {
-        try {
-            WrappedGameProfile profile = WrappedGameProfile.fromPlayer(player);
-            if (profile == null || profile.getProperties() == null) {
-                return null;
-            }
-
-            Collection<WrappedSignedProperty> textures = profile.getProperties().get("textures");
-            if (textures == null || textures.isEmpty()) {
-                return null;
-            }
-
-            WrappedSignedProperty firstTexture = textures.iterator().next();
-            if (firstTexture == null || firstTexture.getValue() == null || firstTexture.getValue().isBlank()) {
-                return null;
-            }
-
-            return new SkinData(firstTexture.getValue(), firstTexture.getSignature());
-        } catch (Exception ignored) {
-            return null;
-        }
+        sender.sendMessage(ChatColor.GREEN + "Skin del actor configurada para usar la skin del jugador espectador.");
     }
 
     private void handleActorScale(CommandSender sender, String[] args) {
@@ -471,62 +405,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return null;
         }
     }
-
-    private SkinData fetchSkinByName(String username) {
-        String cleanName = username == null ? "" : username.trim();
-        if (cleanName.isEmpty()) {
-            return null;
-        }
-
-        String uuid = fetchMojangUuid(cleanName);
-        if (uuid == null) {
-            return null;
-        }
-
-        return fetchSessionSkin(uuid);
-    }
-
-    private String fetchMojangUuid(String username) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.mojang.com/users/profiles/minecraft/" + username))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return null;
-            }
-
-            Matcher matcher = UUID_ID_PATTERN.matcher(response.body());
-            return matcher.find() ? matcher.group(1) : null;
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private SkinData fetchSessionSkin(String uuid) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false"))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return null;
-            }
-
-            Matcher textureMatcher = TEXTURE_PATTERN.matcher(response.body());
-            Matcher signatureMatcher = SIGNATURE_PATTERN.matcher(response.body());
-            if (!textureMatcher.find() || !signatureMatcher.find()) {
-                return null;
-            }
-
-            return new SkinData(textureMatcher.group(1), signatureMatcher.group(1));
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
 
     private void handleActorWindow(CommandSender sender, String[] args) {
         if (args.length < 6) {
@@ -1162,7 +1040,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> [scale]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> player <playerName>");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> player");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
@@ -1285,9 +1163,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return "player".startsWith(args[4].toLowerCase(Locale.ROOT)) ? List.of("player") : Collections.emptyList();
         }
 
-        if (args.length == 6 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin") && args[4].equalsIgnoreCase("player")) {
-            return Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[5].toLowerCase(Locale.ROOT))).toList();
-        }
 
         if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record") && args[2].equalsIgnoreCase("start")) {
             return manager.getCinematic(args[3])
@@ -1357,9 +1232,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         return new ArrayList<>();
-    }
-
-    private record SkinData(String texture, String signature) {
     }
 
     private static final class ActorRecordingState {
