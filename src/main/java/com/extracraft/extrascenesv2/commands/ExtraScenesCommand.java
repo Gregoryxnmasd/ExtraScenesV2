@@ -7,12 +7,15 @@ import com.extracraft.extrascenesv2.cinematics.CinematicPoint;
 import com.extracraft.extrascenesv2.cinematics.SceneActor;
 import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
+import com.comphenix.protocol.wrappers.WrappedGameProfile;
+import com.comphenix.protocol.wrappers.WrappedSignedProperty;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -337,8 +340,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
-        if (args.length < 5) {
-            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> <playerName|texture> [signature]");
+        if (args.length < 6 || !"player".equalsIgnoreCase(args[4])) {
+            sender.sendMessage(ChatColor.RED + "Usage: /scenes actor skin <scene> <actorId> player <playerName>");
             return;
         }
 
@@ -348,16 +351,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        SkinData skinData;
-        if (args.length >= 6) {
-            skinData = new SkinData(args[4], args[5]);
-        } else {
-            skinData = fetchSkinByName(args[4]);
-            if (skinData == null) {
-                sender.sendMessage(ChatColor.RED + "No se pudo resolver la skin premium de ese usuario.");
-                sender.sendMessage(ChatColor.GRAY + "También puedes usar texture+signature manualmente.");
-                return;
-            }
+        SkinData skinData = resolvePlayerSkin(args[5]);
+        if (skinData == null) {
+            sender.sendMessage(ChatColor.RED + "No se pudo resolver la skin para el jugador indicado.");
+            return;
         }
 
         if (!manager.upsertActor(args[2], args[3], actor.displayName(), actor.scale(), skinData.texture(), skinData.signature())) {
@@ -366,6 +363,55 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
         manager.save();
         sender.sendMessage(ChatColor.GREEN + "Skin del actor guardada.");
+    }
+
+    private SkinData resolvePlayerSkin(String playerName) {
+        String cleanName = playerName == null ? "" : playerName.trim();
+        if (cleanName.isEmpty()) {
+            return null;
+        }
+
+        Player online = Bukkit.getPlayerExact(cleanName);
+        if (online == null) {
+            for (Player candidate : Bukkit.getOnlinePlayers()) {
+                if (candidate.getName().equalsIgnoreCase(cleanName)) {
+                    online = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (online != null) {
+            SkinData onlineSkin = fetchSkinFromOnlinePlayer(online);
+            if (onlineSkin != null) {
+                return onlineSkin;
+            }
+        }
+
+        return fetchSkinByName(cleanName);
+    }
+
+    private SkinData fetchSkinFromOnlinePlayer(Player player) {
+        try {
+            WrappedGameProfile profile = WrappedGameProfile.fromPlayer(player);
+            if (profile == null || profile.getProperties() == null) {
+                return null;
+            }
+
+            Collection<WrappedSignedProperty> textures = profile.getProperties().get("textures");
+            if (textures == null || textures.isEmpty()) {
+                return null;
+            }
+
+            WrappedSignedProperty firstTexture = textures.iterator().next();
+            if (firstTexture == null || firstTexture.getValue() == null || firstTexture.getValue().isBlank()) {
+                return null;
+            }
+
+            return new SkinData(firstTexture.getValue(), firstTexture.getSignature());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private void handleActorScale(CommandSender sender, String[] args) {
@@ -1116,7 +1162,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/scenes record stop");
         sender.sendMessage(ChatColor.YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor create <scene> <actorId> [scale]");
-        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> <playerName|texture> [signature]");
+        sender.sendMessage(ChatColor.YELLOW + "/scenes actor skin <scene> <actorId> player <playerName>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(ChatColor.YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
@@ -1233,6 +1279,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return manager.getCinematic(args[2])
                     .map(cinematic -> cinematic.getActors().values().stream().map(SceneActor::id).filter(id -> id.startsWith(args[3])).toList())
                     .orElse(Collections.emptyList());
+        }
+
+        if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin")) {
+            return "player".startsWith(args[4].toLowerCase(Locale.ROOT)) ? List.of("player") : Collections.emptyList();
+        }
+
+        if (args.length == 6 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin") && args[4].equalsIgnoreCase("player")) {
+            return Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[5].toLowerCase(Locale.ROOT))).toList();
         }
 
         if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record") && args[2].equalsIgnoreCase("start")) {
