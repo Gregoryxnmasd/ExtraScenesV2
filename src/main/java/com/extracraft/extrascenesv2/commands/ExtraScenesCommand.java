@@ -48,7 +48,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final String C_AQUA = "§b";
     private static final String C_DARK_AQUA = "§3";
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "delete", "list", "show", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "delete", "list", "show", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
     private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
     private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
@@ -88,6 +88,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "finish" -> handleFinish(sender, args);
             case "tickcmd" -> handleTickCommand(sender, args);
             case "placeholders" -> handlePlaceholders(sender);
+            case "players" -> handlePlayers(sender, args);
             case "delete" -> handleDelete(sender, args);
             case "list" -> handleList(sender);
             case "show" -> handleShow(sender, args);
@@ -142,7 +143,34 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(C_YELLOW + "- /scenes key list " + scene.getId() + " [page]");
         sender.sendMessage(C_YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
+        sender.sendMessage(C_YELLOW + "- /scenes players " + scene.getId() + " <hide|show>");
         sender.sendMessage(C_YELLOW + "- /scenes tickcmd add " + scene.getId() + " <tick> <command>");
+    }
+
+    private void handlePlayers(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(C_RED + "Usage: /scenes players <scene> <hide|show>");
+            return;
+        }
+
+        String mode = args[2].toLowerCase(Locale.ROOT);
+        boolean hidePlayers;
+        if (mode.equals("hide") || mode.equals("on") || mode.equals("true")) {
+            hidePlayers = true;
+        } else if (mode.equals("show") || mode.equals("off") || mode.equals("false")) {
+            hidePlayers = false;
+        } else {
+            sender.sendMessage(C_RED + "Modo inválido. Usa hide o show.");
+            return;
+        }
+
+        if (!manager.setHidePlayersDuringPlayback(args[1], hidePlayers)) {
+            sender.sendMessage(C_RED + "That scene does not exist.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(C_GREEN + "Escena '" + args[1] + "': jugadores " + (hidePlayers ? "ocultos" : "visibles") + " durante la cinemática.");
     }
 
     private void handlePlay(CommandSender sender, String[] args) {
@@ -1147,6 +1175,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         sender.sendMessage(C_GOLD + "Scene " + cinematic.getId() + C_GRAY + " -> duration " + cinematic.getDurationTicks() + "t, " + cinematic.getPoints().size() + " keyframes");
         sender.sendMessage(C_GRAY + "Ending: " + describeEndAction(cinematic.getEndAction()));
+        sender.sendMessage(C_GRAY + "Players during playback: " + (cinematic.shouldHidePlayersDuringPlayback() ? "hidden" : "visible"));
     }
 
     private void sendHelp(CommandSender sender, String label) {
@@ -1171,6 +1200,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes key list <scene> [page]");
         sender.sendMessage(C_YELLOW + "/scenes key clear <scene> confirm");
         sender.sendMessage(C_YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
+        sender.sendMessage(C_YELLOW + "/scenes players <scene> <hide|show>");
         sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
         sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
@@ -1302,6 +1332,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 3 && Arrays.asList("edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Collections.emptyList();
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("players")) {
+            return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
+        }
+
+        if (args.length == 4 && args[0].equalsIgnoreCase("players")) {
+            return List.of("hide", "show", "on", "off");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("finish")) {
