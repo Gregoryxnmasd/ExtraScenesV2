@@ -26,8 +26,9 @@ public final class CinematicManager {
 
     private final JavaPlugin plugin;
     private final Map<String, Cinematic> cinematics = new LinkedHashMap<>();
-    private final Map<String, Cinematic> undoSnapshots = new LinkedHashMap<>();
-    private final Map<String, Cinematic> redoSnapshots = new LinkedHashMap<>();
+    private static final int HISTORY_LIMIT = 100;
+    private final Map<String, Deque<Cinematic>> undoSnapshots = new LinkedHashMap<>();
+    private final Map<String, Deque<Cinematic>> redoSnapshots = new LinkedHashMap<>();
 
     public CinematicManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -279,7 +280,7 @@ public final class CinematicManager {
         if (removed == null) {
             return false;
         }
-        undoSnapshots.put(key, removed);
+        pushHistory(undoSnapshots, key, removed);
         redoSnapshots.remove(key);
         save();
         return true;
@@ -745,14 +746,17 @@ public final class CinematicManager {
     public boolean undo(String id) {
         String key = normalizeId(id);
         Cinematic current = cinematics.get(key);
-        Cinematic previous = undoSnapshots.get(key);
-        if (current == null || previous == null) {
+        Deque<Cinematic> undoStack = undoSnapshots.get(key);
+        if (current == null || undoStack == null || undoStack.isEmpty()) {
             return false;
         }
+        Cinematic previous = undoStack.pop();
 
-        redoSnapshots.put(key, current);
+        pushHistory(redoSnapshots, key, current);
         cinematics.put(key, previous);
-        undoSnapshots.remove(key);
+        if (undoStack.isEmpty()) {
+            undoSnapshots.remove(key);
+        }
         save();
         return true;
     }
@@ -760,14 +764,17 @@ public final class CinematicManager {
     public boolean redo(String id) {
         String key = normalizeId(id);
         Cinematic current = cinematics.get(key);
-        Cinematic next = redoSnapshots.get(key);
-        if (current == null || next == null) {
+        Deque<Cinematic> redoStack = redoSnapshots.get(key);
+        if (current == null || redoStack == null || redoStack.isEmpty()) {
             return false;
         }
+        Cinematic next = redoStack.pop();
 
-        undoSnapshots.put(key, current);
+        pushHistory(undoSnapshots, key, current);
         cinematics.put(key, next);
-        redoSnapshots.remove(key);
+        if (redoStack.isEmpty()) {
+            redoSnapshots.remove(key);
+        }
         save();
         return true;
     }
@@ -776,8 +783,42 @@ public final class CinematicManager {
         if (key == null || cinematic == null) {
             return;
         }
-        undoSnapshots.put(key, cinematic);
+        Cinematic current = cinematics.get(key);
+        if (current != null && areEquivalent(current, cinematic)) {
+            return;
+        }
+        pushHistory(undoSnapshots, key, cinematic);
         redoSnapshots.remove(key);
+    }
+
+    private void pushHistory(Map<String, Deque<Cinematic>> history, String key, Cinematic cinematic) {
+        Deque<Cinematic> stack = history.computeIfAbsent(key, ignored -> new ArrayDeque<>());
+        if (!stack.isEmpty() && areEquivalent(stack.peek(), cinematic)) {
+            return;
+        }
+        stack.push(cinematic);
+        while (stack.size() > HISTORY_LIMIT) {
+            stack.removeLast();
+        }
+    }
+
+    private boolean areEquivalent(Cinematic a, Cinematic b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.getId().equalsIgnoreCase(b.getId())
+                && a.getDurationTicks() == b.getDurationTicks()
+                && a.getPoints().equals(b.getPoints())
+                && a.getTickCommands().equals(b.getTickCommands())
+                && a.getActors().equals(b.getActors())
+                && a.shouldHidePlayersDuringPlayback() == b.shouldHidePlayersDuringPlayback()
+                && java.util.Objects.equals(a.getAudioTrack(), b.getAudioTrack())
+                && a.getSubtitleCues().equals(b.getSubtitleCues())
+                && java.util.Objects.equals(a.getEndAction().type(), b.getEndAction().type())
+                && java.util.Objects.equals(a.getEndAction().teleportLocation(), b.getEndAction().teleportLocation());
     }
 
     private String normalizeId(String id) {

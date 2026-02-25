@@ -777,6 +777,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         actorRecordings.put(player.getUniqueId(), state);
         giveSaveRecorderItem(player);
         actorPreviewService.start(player, scene, startTick, state.actorId);
+        playbackService.syncSubtitleForTick(player, scene, startTick);
 
         player.sendMessage(C_GREEN + "Preparado recordfrom tick " + startTick + ". Cuenta regresiva iniciada.");
         player.showTitle(Title.title(Component.text(C_YELLOW + "Recording actor en"), Component.text(C_GOLD + "3")));
@@ -838,7 +839,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         ActorRecordingState state = new ActorRecordingState(args[3], args[4], duration == null ? manager.getCinematic(args[3]).map(Cinematic::getDurationTicks).orElse(200) : duration, 0);
         actorRecordings.put(player.getUniqueId(), state);
         giveSaveRecorderItem(player);
-        manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.start(player, cinematic, 0, state.actorId));
+        manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
+            actorPreviewService.start(player, cinematic, 0, state.actorId);
+            playbackService.syncSubtitleForTick(player, cinematic, 0);
+        });
 
         player.showTitle(Title.title(Component.text(C_YELLOW + "Recording actor en"), Component.text(C_GOLD + "3")));
         state.countdownTaskTwo = Bukkit.getScheduler().runTaskLater(plugin,
@@ -868,11 +872,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
-            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
-            if (state.tick % 20 == 0) {
-                persistActorRecordingProgress(state);
+            manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
+                actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
+                playbackService.syncSubtitleForTick(online, cinematic, state.tick);
+            });
+
+            if (!persistActorRecordingProgress(state)) {
+                online.sendMessage(C_RED + "No se pudo persistir el recording del actor. Grabación detenida para evitar pérdida de datos.");
+                stopActorRecording(online.getUniqueId());
+                return;
             }
-            online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
+
+            online.sendActionBar(Component.text(buildRecordingActionBar(state)));
             state.tick++;
         }, 0L, 1L);
     }
@@ -962,6 +973,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 player.getInventory().setItem(8, null);
             }
             actorPreviewService.cleanup(player);
+            player.sendActionBar(Component.empty());
         }
     }
 
@@ -1628,6 +1640,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         return null;
     }
 
+
+    private String buildRecordingActionBar(ActorRecordingState state) {
+        return C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks;
+    }
 
     private String describeEndAction(Cinematic.EndAction endAction) {
         if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {

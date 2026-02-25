@@ -143,12 +143,22 @@ public final class CinematicPlaybackService {
         return line == 2 ? subtitleLine2.getOrDefault(playerId, "") : subtitleLine1.getOrDefault(playerId, "");
     }
 
+    public void syncSubtitleForTick(Player player, Cinematic cinematic, int tick) {
+        if (player == null || cinematic == null) {
+            return;
+        }
+        CinematicSubtitleCue cue = cinematic.getSubtitleAtTick(Math.max(0, tick));
+        subtitleLine1.put(player.getUniqueId(), cue == null ? "" : cue.line1());
+        subtitleLine2.put(player.getUniqueId(), cue == null ? "" : cue.line2());
+    }
+
     public boolean stop(Player player) {
         PlaybackState state = states.remove(player.getUniqueId());
         if (state == null) {
             return false;
         }
 
+        cancelSeekTransition(state);
         cancelTask(state);
         restoreHiddenPlayers(player, state);
         clearFakeHelmet(player);
@@ -165,6 +175,7 @@ public final class CinematicPlaybackService {
         if (state == null || !state.running) {
             return false;
         }
+        cancelSeekTransition(state);
         cancelTask(state);
         state.running = false;
         stopAudio(player, state);
@@ -189,8 +200,16 @@ public final class CinematicPlaybackService {
         }
 
         int clampedTick = Math.max(0, Math.min(targetTick, state.endTick));
-        state.currentTick = clampedTick;
-        renderAtTick(player, state, clampedTick, false);
+        int fromTick = Math.max(0, state.currentTick);
+        if (fromTick == clampedTick) {
+            renderAtTick(player, state, clampedTick, false);
+            return true;
+        }
+
+        cancelSeekTransition(state);
+        int distance = Math.abs(clampedTick - fromTick);
+        int transitionSteps = Math.max(3, Math.min(40, Math.max(1, distance / 2)));
+        startSeekTransition(player, state, fromTick, clampedTick, transitionSteps);
 
         if (state.running) {
             stopAudio(player, state);
@@ -202,18 +221,21 @@ public final class CinematicPlaybackService {
     public void stopAll() {
         for (UUID playerId : states.keySet().toArray(UUID[]::new)) {
             PlaybackState state = states.remove(playerId);
-            if (state != null) {
-                cancelTask(state);
-                Player player = Bukkit.getPlayer(playerId);
-                if (player != null && player.isOnline()) {
-                    restoreHiddenPlayers(player, state);
-                    clearFakeHelmet(player);
-                    restoreGameMode(player, state);
-                    actorPlaybackService.cleanup(player);
-                    subtitleLine1.remove(playerId);
-                    subtitleLine2.remove(playerId);
-                    stopAudio(player, state);
-                }
+            if (state == null) {
+                continue;
+            }
+
+            cancelSeekTransition(state);
+            cancelTask(state);
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) {
+                restoreHiddenPlayers(player, state);
+                clearFakeHelmet(player);
+                restoreGameMode(player, state);
+                actorPlaybackService.cleanup(player);
+                subtitleLine1.remove(playerId);
+                subtitleLine2.remove(playerId);
+                stopAudio(player, state);
             }
         }
     }
@@ -225,6 +247,7 @@ public final class CinematicPlaybackService {
         }
 
         cancelTask(state);
+        cancelSeekTransition(state);
         state.running = false;
         restoreHiddenPlayers(player, state);
         clearFakeHelmet(player);
@@ -513,6 +536,44 @@ public final class CinematicPlaybackService {
         }
     }
 
+    private static void cancelSeekTransition(PlaybackState state) {
+        if (state.seekTransitionTask != null) {
+            state.seekTransitionTask.cancel();
+            state.seekTransitionTask = null;
+        }
+    }
+
+    private void startSeekTransition(Player player, PlaybackState state, int fromTick, int toTick, int steps) {
+        if (steps <= 1) {
+            state.currentTick = toTick;
+            renderAtTick(player, state, toTick, false);
+            return;
+        }
+
+        final int[] currentStep = {0};
+        state.seekTransitionTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!player.isOnline() || !states.containsKey(player.getUniqueId())) {
+                cancelSeekTransition(state);
+                return;
+            }
+
+            double t = currentStep[0] / (double) steps;
+            double smoothT = smootherStep(t);
+            int renderTick = (int) Math.round(fromTick + ((toTick - fromTick) * smoothT));
+            renderTick = Math.max(0, Math.min(renderTick, state.endTick));
+
+            state.currentTick = renderTick;
+            renderAtTick(player, state, renderTick, false);
+
+            currentStep[0]++;
+            if (currentStep[0] > steps) {
+                state.currentTick = toTick;
+                renderAtTick(player, state, toTick, false);
+                cancelSeekTransition(state);
+            }
+        }, 0L, 1L);
+    }
+
     private void applyFakePumpkin(Player player) {
         applyMovementSpeedPenalty(player);
         player.sendEquipmentChange(player, EquipmentSlot.HEAD, createFakePumpkin());
@@ -585,6 +646,7 @@ public final class CinematicPlaybackService {
         private boolean running;
         private boolean changedGameMode;
         private BukkitTask task;
+        private BukkitTask seekTransitionTask;
         private final Set<UUID> hiddenPlayers = new HashSet<>();
 
         private PlaybackState(Cinematic cinematic, int startTick, int endTick, boolean fullPlayback, Location startLocation, GameMode originalGameMode) {
