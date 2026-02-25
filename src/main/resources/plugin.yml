@@ -6,7 +6,7 @@ author: ExtraCraft
 website: https://extracraft.com
 folia-supported: true
 depend: [PlaceholderAPI]
-softdepend: [ProtocolLib]
+softdepend: [ProtocolLib, OpenAudioMc, OpenAudioMC]
 commands:
   extrascenes:
     description: Scene system

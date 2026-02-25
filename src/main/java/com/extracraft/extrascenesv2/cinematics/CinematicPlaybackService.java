@@ -1,5 +1,6 @@
 package com.extracraft.extrascenesv2.cinematics;
 
+import com.extracraft.extrascenesv2.audio.OpenAudioCommandService;
 import com.extracraft.extrascenesv2.placeholders.PlaceholderResolver;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,7 @@ public final class CinematicPlaybackService {
     private final Map<UUID, Set<String>> playedCinematics = new HashMap<>();
     private final PlaceholderResolver placeholderResolver;
     private final ActorPlaybackService actorPlaybackService;
+    private final OpenAudioCommandService openAudioCommandService;
     private final Map<UUID, String> subtitleLine1 = new HashMap<>();
     private final Map<UUID, String> subtitleLine2 = new HashMap<>();
     private static final double BEZIER_TENSION = 0.82;
@@ -45,9 +47,15 @@ public final class CinematicPlaybackService {
     }
 
     public CinematicPlaybackService(JavaPlugin plugin, PlaceholderResolver placeholderResolver, ActorPlaybackService actorPlaybackService) {
+        this(plugin, placeholderResolver, actorPlaybackService, new OpenAudioCommandService(plugin));
+    }
+
+    public CinematicPlaybackService(JavaPlugin plugin, PlaceholderResolver placeholderResolver,
+                                    ActorPlaybackService actorPlaybackService, OpenAudioCommandService openAudioCommandService) {
         this.plugin = plugin;
         this.placeholderResolver = placeholderResolver;
         this.actorPlaybackService = actorPlaybackService;
+        this.openAudioCommandService = openAudioCommandService;
     }
 
     public boolean isInCinematic(Player player) {
@@ -506,9 +514,9 @@ public final class CinematicPlaybackService {
         if (track == null || !track.isConfigured()) {
             return;
         }
-        int seekMillis = track.startAtMillis() + (state.currentTick * 50);
-        String payload = String.format("oa play %s %s {\"startAtMillis\":%d}", player.getName(), track.source() + ":" + track.track(), Math.max(0, seekMillis));
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), payload);
+        int seekMillis = Math.max(0, track.startAtMillis() + (state.currentTick * 50));
+        String payload = track.renderPlayCommand(player.getName(), seekMillis);
+        openAudioCommandService.dispatch(payload, "playback-start scene=" + state.cinematic.getId() + " player=" + player.getName());
     }
 
     private void stopAudio(Player player, PlaybackState state) {
@@ -516,11 +524,8 @@ public final class CinematicPlaybackService {
         if (track == null || !track.isConfigured()) {
             return;
         }
-        String stopCommand = track.stopCommandTemplate().replace("{player}", player.getName());
-        if (stopCommand.startsWith("/")) {
-            stopCommand = stopCommand.substring(1);
-        }
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stopCommand);
+        String stopCommand = track.renderStopCommand(player.getName());
+        openAudioCommandService.dispatch(stopCommand, "playback-stop scene=" + state.cinematic.getId() + " player=" + player.getName());
     }
 
     private void markAsPlayed(UUID playerId, String cinematicId) {
