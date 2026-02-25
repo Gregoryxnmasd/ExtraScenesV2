@@ -466,13 +466,46 @@ public final class ActorPlaybackService {
     }
 
     private void appendPoseDataValue(List<WrappedDataValue> dataValues, String poseName) {
+        EnumWrappers.EntityPose wrappedPose = resolveEntityPose(poseName);
+        if (wrappedPose == null) {
+            return;
+        }
+
         try {
-            EnumWrappers.EntityPose wrappedPose = EnumWrappers.EntityPose.valueOf(poseName);
             Object nmsPose = EnumWrappers.getEntityPoseConverter().getGeneric(wrappedPose);
             dataValues.add(new WrappedDataValue(6, WrappedDataWatcher.Registry.get(EnumWrappers.getEntityPoseClass()), nmsPose));
         } catch (Exception ignored) {
             // Keep default standing pose if conversion is unavailable for this server version.
         }
+    }
+
+    private EnumWrappers.EntityPose resolveEntityPose(String poseName) {
+        String normalized = poseName == null ? "STANDING" : poseName.toUpperCase(Locale.ROOT);
+
+        EnumWrappers.EntityPose direct = findEntityPose(normalized);
+        if (direct != null) {
+            return direct;
+        }
+
+        return switch (normalized) {
+            case "SNEAKING", "SITTING" -> {
+                EnumWrappers.EntityPose crouching = findEntityPose("CROUCHING");
+                if (crouching != null) {
+                    yield crouching;
+                }
+                yield findEntityPose("SNEAKING");
+            }
+            default -> findEntityPose("STANDING");
+        };
+    }
+
+    private EnumWrappers.EntityPose findEntityPose(String poseName) {
+        for (EnumWrappers.EntityPose entityPose : EnumWrappers.EntityPose.values()) {
+            if (entityPose.name().equalsIgnoreCase(poseName)) {
+                return entityPose;
+            }
+        }
+        return null;
     }
 
     private boolean isExcluded(SceneActor actor, String excludedActorId) {
