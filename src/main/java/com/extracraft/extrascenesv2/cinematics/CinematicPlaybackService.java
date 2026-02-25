@@ -506,8 +506,8 @@ public final class CinematicPlaybackService {
         if (track == null || !track.isConfigured()) {
             return;
         }
-        int seekMillis = track.startAtMillis() + (state.currentTick * 50);
-        String payload = String.format("oa play %s %s {\"startAtMillis\":%d}", player.getName(), track.source() + ":" + track.track(), Math.max(0, seekMillis));
+        int seekMillis = Math.max(0, track.startAtMillis() + (state.currentTick * 50));
+        String payload = track.renderPlayCommand(player.getName(), seekMillis);
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), payload);
     }
 
@@ -516,10 +516,7 @@ public final class CinematicPlaybackService {
         if (track == null || !track.isConfigured()) {
             return;
         }
-        String stopCommand = track.stopCommandTemplate().replace("{player}", player.getName());
-        if (stopCommand.startsWith("/")) {
-            stopCommand = stopCommand.substring(1);
-        }
+        String stopCommand = track.renderStopCommand(player.getName());
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stopCommand);
     }
 

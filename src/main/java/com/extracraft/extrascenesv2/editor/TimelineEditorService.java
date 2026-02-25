@@ -82,6 +82,40 @@ public final class TimelineEditorService {
         return false;
     }
 
+    public boolean play(Player player) {
+        EditorSession session = sessions.get(player.getUniqueId());
+        if (session == null) {
+            return false;
+        }
+        if (playbackService.resume(player)) {
+            session.playing = true;
+            player.sendActionBar(Component.text(C_GREEN + "Reproduciendo timeline..."));
+            return true;
+        }
+        if (playbackService.isInCinematic(player)) {
+            session.playing = true;
+            return true;
+        }
+        return false;
+    }
+
+    public boolean pause(Player player) {
+        EditorSession session = sessions.get(player.getUniqueId());
+        if (session == null) {
+            return false;
+        }
+        if (playbackService.pause(player)) {
+            session.playing = false;
+            player.sendActionBar(Component.text(C_YELLOW + "Pausado en tick " + playbackService.getCurrentTick(player.getUniqueId())));
+            return true;
+        }
+        if (!playbackService.isInCinematic(player)) {
+            session.playing = false;
+            return true;
+        }
+        return false;
+    }
+
     public boolean seek(Player player, int deltaTicks) {
         EditorSession session = sessions.get(player.getUniqueId());
         if (session == null) {
