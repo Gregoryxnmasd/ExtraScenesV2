@@ -855,6 +855,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        startActorRecordingAudio(player, state);
+
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             Player online = Bukkit.getPlayer(player.getUniqueId());
             if (online == null || !online.isOnline()) {
@@ -870,6 +872,37 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
         }, 0L, 1L);
+    }
+
+    private void startActorRecordingAudio(Player player, ActorRecordingState state) {
+        Cinematic cinematic = manager.getCinematic(state.sceneId).orElse(null);
+        if (cinematic == null) {
+            return;
+        }
+
+        CinematicAudioTrack track = cinematic.getAudioTrack();
+        if (track == null || !track.isConfigured()) {
+            return;
+        }
+
+        int seekMillis = Math.max(0, track.startAtMillis() + (state.tick * 50));
+        String payload = String.format("oa play %s %s {\"startAtMillis\":%d}",
+                player.getName(),
+                track.source() + ":" + track.track(),
+                seekMillis);
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), payload);
+
+        state.audioStopCommand = track.stopCommandTemplate().replace("{player}", player.getName());
+        state.audioPlaying = true;
+    }
+
+    private void stopActorRecordingAudio(ActorRecordingState state) {
+        if (state == null || !state.audioPlaying || state.audioStopCommand == null || state.audioStopCommand.isBlank()) {
+            return;
+        }
+        String stopCommand = state.audioStopCommand.startsWith("/") ? state.audioStopCommand.substring(1) : state.audioStopCommand;
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stopCommand);
+        state.audioPlaying = false;
     }
 
     public boolean isActorSaveItem(ItemStack item) {
@@ -905,6 +938,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (state == null) {
             return;
         }
+        stopActorRecordingAudio(state);
         if (state.task != null) {
             state.task.cancel();
         }
@@ -1416,7 +1450,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 2) {
-            player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
+            player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to|actor|record>");
             return;
         }
 
@@ -1481,7 +1515,31 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage(C_RED + "No hay sesión de editor activa.");
                 }
             }
-            default -> player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
+            case "actor" -> {
+                if (args.length < 3) {
+                    player.sendMessage(C_RED + "Usage: /scenes editor actor <actorId>");
+                    return;
+                }
+                if (!timelineEditorService.setSelectedActor(player, args[2])) {
+                    player.sendMessage(C_RED + "Actor inválido o no hay sesión de editor activa.");
+                    return;
+                }
+                player.sendMessage(C_GREEN + "Actor del editor seleccionado: " + args[2]);
+            }
+            case "record" -> {
+                Integer durationTicks = null;
+                if (args.length >= 3) {
+                    durationTicks = parseDurationTicks(args[2]);
+                    if (durationTicks == null) {
+                        player.sendMessage(C_RED + "Duración inválida. Usa 10s o 200t.");
+                        return;
+                    }
+                }
+                if (!timelineEditorService.startSelectedActorRecording(player, durationTicks)) {
+                    player.sendMessage(C_RED + "No se pudo iniciar recording desde editor.");
+                }
+            }
+            default -> player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to|actor|record>");
         }
     }
 
@@ -1509,7 +1567,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
         sender.sendMessage(C_YELLOW + "/scenes players <scene> <hide|show>");
         sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
-        sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to>");
+        sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to|actor|record>");
         sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
 
@@ -1599,11 +1657,25 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("editor")) {
-            return List.of("open", "close", "play", "pause", "seek", "to");
+            return List.of("open", "close", "play", "pause", "seek", "to", "actor", "record");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("open")) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("record")) {
+            return List.of("10s", "200t");
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("actor") && sender instanceof Player player) {
+            String sceneId = timelineEditorService.getSceneId(player);
+            if (sceneId == null) {
+                return Collections.emptyList();
+            }
+            return manager.getCinematic(sceneId)
+                    .map(cinematic -> cinematic.getActors().values().stream().map(SceneActor::id).filter(id -> id.startsWith(args[2])).toList())
+                    .orElse(Collections.emptyList());
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record")) {
@@ -1727,6 +1799,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         private BukkitTask startTask;
         private BukkitTask countdownTaskOne;
         private BukkitTask countdownTaskTwo;
+        private String audioStopCommand;
+        private boolean audioPlaying;
 
         private ActorRecordingState(String sceneId, String actorId, int maxTicks, int startTick) {
             this.sceneId = sceneId;
