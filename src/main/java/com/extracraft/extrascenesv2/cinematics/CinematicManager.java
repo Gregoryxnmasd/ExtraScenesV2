@@ -1,18 +1,23 @@
 package com.extracraft.extrascenesv2.cinematics;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CinematicManager {
@@ -26,6 +31,31 @@ public final class CinematicManager {
 
     public void load() {
         cinematics.clear();
+        File scenesFolder = getScenesFolder();
+        if (!scenesFolder.exists() && !scenesFolder.mkdirs()) {
+            plugin.getLogger().warning("Could not create scenes folder at " + scenesFolder.getAbsolutePath());
+            return;
+        }
+
+        boolean loadedFromFiles = false;
+        File[] sceneFiles = scenesFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (sceneFiles != null) {
+            for (File sceneFile : sceneFiles) {
+                YamlConfiguration sceneConfig = YamlConfiguration.loadConfiguration(sceneFile);
+                String fallbackId = stripExtension(sceneFile.getName());
+                Cinematic cinematic = parseCinematic(sceneConfig, fallbackId);
+                if (cinematic == null) {
+                    continue;
+                }
+                cinematics.put(normalizeId(cinematic.getId()), cinematic);
+                loadedFromFiles = true;
+            }
+        }
+
+        if (loadedFromFiles) {
+            return;
+        }
+
         FileConfiguration config = plugin.getConfig();
         ConfigurationSection scenesSection = config.getConfigurationSection("cinematics");
         if (scenesSection == null) {
@@ -33,116 +63,175 @@ public final class CinematicManager {
         }
 
         for (String id : scenesSection.getKeys(false)) {
-            int durationTicks = Math.max(1, scenesSection.getInt(id + ".durationTicks", 200));
-            List<CinematicPoint> points = new ArrayList<>();
-            List<Map<?, ?>> rawPoints = scenesSection.getMapList(id + ".points");
-            for (Map<?, ?> pointMap : rawPoints) {
-                String worldName = String.valueOf(pointMap.get("world"));
-                World world = Bukkit.getWorld(worldName);
-                if (world == null) {
-                    continue;
-                }
-
-                double x = asDouble(pointMap.get("x"));
-                double y = asDouble(pointMap.get("y"));
-                double z = asDouble(pointMap.get("z"));
-                float yaw = (float) asDouble(pointMap.get("yaw"));
-                float pitch = (float) asDouble(pointMap.get("pitch"));
-                Object tickObj = pointMap.containsKey("tick") ? pointMap.get("tick") : 0;
-                int tick = Math.max(0, (int) asDouble(tickObj));
-                CinematicPoint.InterpolationMode interpolationMode = CinematicPoint.InterpolationMode.fromString(
-                        pointMap.containsKey("interpolation") ? String.valueOf(pointMap.get("interpolation")) : null);
-
-                points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch), interpolationMode));
+            ConfigurationSection legacySceneSection = scenesSection.getConfigurationSection(id);
+            if (legacySceneSection == null) {
+                continue;
             }
 
-            points.sort(Comparator.comparingInt(CinematicPoint::tick));
+            Cinematic cinematic = parseCinematic(legacySceneSection, id);
+            if (cinematic == null) {
+                continue;
+            }
+            cinematics.put(normalizeId(cinematic.getId()), cinematic);
+        }
 
-            Map<Integer, List<String>> tickCommands = parseTickCommands(
-                    scenesSection.getConfigurationSection(id + ".tickCommands"));
-
-            ConfigurationSection endActionSection = scenesSection.getConfigurationSection(id + ".endAction");
-            Cinematic.EndAction endAction = parseEndAction(endActionSection);
-            cinematics.put(normalizeId(id), new Cinematic(id, durationTicks, points, endAction, tickCommands, parseActors(scenesSection.getConfigurationSection(id + ".actors"))));
+        if (!cinematics.isEmpty()) {
+            save();
         }
     }
 
     public void save() {
-        FileConfiguration config = plugin.getConfig();
-        config.set("cinematics", null);
+        File scenesFolder = getScenesFolder();
+        if (!scenesFolder.exists() && !scenesFolder.mkdirs()) {
+            plugin.getLogger().warning("Could not create scenes folder at " + scenesFolder.getAbsolutePath());
+            return;
+        }
+
+        Set<String> expectedSceneFiles = new HashSet<>();
 
         for (Cinematic cinematic : cinematics.values()) {
-            List<Map<String, Object>> serializedPoints = new ArrayList<>();
-            for (CinematicPoint point : cinematic.getPoints()) {
-                Location loc = point.location();
-                Map<String, Object> serialized = new LinkedHashMap<>();
-                serialized.put("tick", point.tick());
-                serialized.put("world", loc.getWorld() == null ? "world" : loc.getWorld().getName());
-                serialized.put("x", loc.getX());
-                serialized.put("y", loc.getY());
-                serialized.put("z", loc.getZ());
-                serialized.put("yaw", loc.getYaw());
-                serialized.put("pitch", loc.getPitch());
-                serialized.put("interpolation", point.interpolationMode().name().toLowerCase(Locale.ROOT));
-                serializedPoints.add(serialized);
-            }
-            config.set("cinematics." + cinematic.getId() + ".durationTicks", cinematic.getDurationTicks());
-            config.set("cinematics." + cinematic.getId() + ".points", serializedPoints);
-            String tickCommandPath = "cinematics." + cinematic.getId() + ".tickCommands";
-            config.set(tickCommandPath, null);
-            for (Map.Entry<Integer, List<String>> entry : cinematic.getTickCommands().entrySet()) {
-                config.set(tickCommandPath + "." + entry.getKey(), entry.getValue());
-            }
+            String sceneFileName = normalizeId(cinematic.getId()) + ".yml";
+            expectedSceneFiles.add(sceneFileName);
 
-            String actorsPath = "cinematics." + cinematic.getId() + ".actors";
-            config.set(actorsPath, null);
-            for (SceneActor actor : cinematic.getActors().values()) {
-                String actorPath = actorsPath + "." + actor.id();
-                config.set(actorPath + ".displayName", actor.displayName());
-                config.set(actorPath + ".scale", actor.scale());
-                config.set(actorPath + ".skin.texture", actor.skinTexture());
-                config.set(actorPath + ".skin.signature", actor.skinSignature());
-                config.set(actorPath + ".appearAtTick", actor.appearAtTick());
-                config.set(actorPath + ".disappearAtTick", actor.disappearAtTick());
+            YamlConfiguration sceneConfig = new YamlConfiguration();
+            writeCinematic(sceneConfig, cinematic);
 
-                List<Map<String, Object>> frameList = new ArrayList<>();
-                for (ActorFrame frame : actor.frames()) {
-                    Location frameLoc = frame.location();
-                    if (frameLoc == null || frameLoc.getWorld() == null) {
-                        continue;
-                    }
-                    Map<String, Object> serialized = new LinkedHashMap<>();
-                    serialized.put("tick", frame.tick());
-                    serialized.put("world", frameLoc.getWorld().getName());
-                    serialized.put("x", frameLoc.getX());
-                    serialized.put("y", frameLoc.getY());
-                    serialized.put("z", frameLoc.getZ());
-                    serialized.put("yaw", frameLoc.getYaw());
-                    serialized.put("pitch", frameLoc.getPitch());
-                    serialized.put("headYaw", frame.headYaw());
-                    serialized.put("pose", frame.pose());
-                    frameList.add(serialized);
+            try {
+                sceneConfig.save(new File(scenesFolder, sceneFileName));
+            } catch (IOException ex) {
+                plugin.getLogger().warning("Could not save scene file " + sceneFileName + ": " + ex.getMessage());
+            }
+        }
+
+        File[] existingSceneFiles = scenesFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (existingSceneFiles != null) {
+            for (File existingSceneFile : existingSceneFiles) {
+                if (expectedSceneFiles.contains(existingSceneFile.getName())) {
+                    continue;
                 }
-                config.set(actorPath + ".frames", frameList);
+                if (!existingSceneFile.delete()) {
+                    plugin.getLogger().warning("Could not delete removed scene file " + existingSceneFile.getName());
+                }
             }
+        }
 
-            String endActionPath = "cinematics." + cinematic.getId() + ".endAction";
-            config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
-            Location teleportLocation = cinematic.getEndAction().teleportLocation();
-            if (teleportLocation == null || teleportLocation.getWorld() == null) {
-                config.set(endActionPath + ".teleport", null);
+        FileConfiguration config = plugin.getConfig();
+        config.set("cinematics", null);
+        plugin.saveConfig();
+    }
+
+    private Cinematic parseCinematic(ConfigurationSection sceneSection, String fallbackId) {
+        String id = sceneSection.getString("id", fallbackId);
+        int durationTicks = Math.max(1, sceneSection.getInt("durationTicks", 200));
+        List<CinematicPoint> points = new ArrayList<>();
+        for (Map<?, ?> pointMap : sceneSection.getMapList("points")) {
+            String worldName = String.valueOf(pointMap.get("world"));
+            World world = Bukkit.getWorld(worldName);
+            if (world == null) {
                 continue;
             }
 
-            config.set(endActionPath + ".teleport.world", teleportLocation.getWorld().getName());
-            config.set(endActionPath + ".teleport.x", teleportLocation.getX());
-            config.set(endActionPath + ".teleport.y", teleportLocation.getY());
-            config.set(endActionPath + ".teleport.z", teleportLocation.getZ());
-            config.set(endActionPath + ".teleport.yaw", teleportLocation.getYaw());
-            config.set(endActionPath + ".teleport.pitch", teleportLocation.getPitch());
+            double x = asDouble(pointMap.get("x"));
+            double y = asDouble(pointMap.get("y"));
+            double z = asDouble(pointMap.get("z"));
+            float yaw = (float) asDouble(pointMap.get("yaw"));
+            float pitch = (float) asDouble(pointMap.get("pitch"));
+            Object tickObj = pointMap.containsKey("tick") ? pointMap.get("tick") : 0;
+            int tick = Math.max(0, (int) asDouble(tickObj));
+            CinematicPoint.InterpolationMode interpolationMode = CinematicPoint.InterpolationMode.fromString(
+                    pointMap.containsKey("interpolation") ? String.valueOf(pointMap.get("interpolation")) : null);
+
+            points.add(new CinematicPoint(tick, new Location(world, x, y, z, yaw, pitch), interpolationMode));
         }
 
-        plugin.saveConfig();
+        points.sort(Comparator.comparingInt(CinematicPoint::tick));
+        Map<Integer, List<String>> tickCommands = parseTickCommands(sceneSection.getConfigurationSection("tickCommands"));
+        Cinematic.EndAction endAction = parseEndAction(sceneSection.getConfigurationSection("endAction"));
+        Map<String, SceneActor> actors = parseActors(sceneSection.getConfigurationSection("actors"));
+        return new Cinematic(id, durationTicks, points, endAction, tickCommands, actors);
+    }
+
+    private void writeCinematic(YamlConfiguration config, Cinematic cinematic) {
+        config.set("id", cinematic.getId());
+        List<Map<String, Object>> serializedPoints = new ArrayList<>();
+        for (CinematicPoint point : cinematic.getPoints()) {
+            Location loc = point.location();
+            Map<String, Object> serialized = new LinkedHashMap<>();
+            serialized.put("tick", point.tick());
+            serialized.put("world", loc.getWorld() == null ? "world" : loc.getWorld().getName());
+            serialized.put("x", loc.getX());
+            serialized.put("y", loc.getY());
+            serialized.put("z", loc.getZ());
+            serialized.put("yaw", loc.getYaw());
+            serialized.put("pitch", loc.getPitch());
+            serialized.put("interpolation", point.interpolationMode().name().toLowerCase(Locale.ROOT));
+            serializedPoints.add(serialized);
+        }
+
+        config.set("durationTicks", cinematic.getDurationTicks());
+        config.set("points", serializedPoints);
+        config.set("tickCommands", null);
+        for (Map.Entry<Integer, List<String>> entry : cinematic.getTickCommands().entrySet()) {
+            config.set("tickCommands." + entry.getKey(), entry.getValue());
+        }
+
+        config.set("actors", null);
+        for (SceneActor actor : cinematic.getActors().values()) {
+            String actorPath = "actors." + actor.id();
+            config.set(actorPath + ".displayName", actor.displayName());
+            config.set(actorPath + ".scale", actor.scale());
+            config.set(actorPath + ".skin.texture", actor.skinTexture());
+            config.set(actorPath + ".skin.signature", actor.skinSignature());
+            config.set(actorPath + ".appearAtTick", actor.appearAtTick());
+            config.set(actorPath + ".disappearAtTick", actor.disappearAtTick());
+
+            List<Map<String, Object>> frameList = new ArrayList<>();
+            for (ActorFrame frame : actor.frames()) {
+                Location frameLoc = frame.location();
+                if (frameLoc == null || frameLoc.getWorld() == null) {
+                    continue;
+                }
+                Map<String, Object> serialized = new LinkedHashMap<>();
+                serialized.put("tick", frame.tick());
+                serialized.put("world", frameLoc.getWorld().getName());
+                serialized.put("x", frameLoc.getX());
+                serialized.put("y", frameLoc.getY());
+                serialized.put("z", frameLoc.getZ());
+                serialized.put("yaw", frameLoc.getYaw());
+                serialized.put("pitch", frameLoc.getPitch());
+                serialized.put("headYaw", frame.headYaw());
+                serialized.put("pose", frame.pose());
+                frameList.add(serialized);
+            }
+            config.set(actorPath + ".frames", frameList);
+        }
+
+        String endActionPath = "endAction";
+        config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
+        Location teleportLocation = cinematic.getEndAction().teleportLocation();
+        if (teleportLocation == null || teleportLocation.getWorld() == null) {
+            config.set(endActionPath + ".teleport", null);
+            return;
+        }
+
+        config.set(endActionPath + ".teleport.world", teleportLocation.getWorld().getName());
+        config.set(endActionPath + ".teleport.x", teleportLocation.getX());
+        config.set(endActionPath + ".teleport.y", teleportLocation.getY());
+        config.set(endActionPath + ".teleport.z", teleportLocation.getZ());
+        config.set(endActionPath + ".teleport.yaw", teleportLocation.getYaw());
+        config.set(endActionPath + ".teleport.pitch", teleportLocation.getPitch());
+    }
+
+    private File getScenesFolder() {
+        return new File(plugin.getDataFolder(), "scenes");
+    }
+
+    private String stripExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex < 0) {
+            return fileName;
+        }
+        return fileName.substring(0, dotIndex);
     }
 
     public boolean createCinematic(String id, int durationTicks) {
