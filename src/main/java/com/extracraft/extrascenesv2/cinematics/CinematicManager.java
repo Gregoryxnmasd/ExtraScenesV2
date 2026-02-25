@@ -2,6 +2,10 @@ package com.extracraft.extrascenesv2.cinematics;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -104,7 +108,7 @@ public final class CinematicManager {
             writeCinematic(sceneConfig, cinematic);
 
             try {
-                sceneConfig.save(new File(scenesFolder, sceneFileName));
+                atomicSaveYaml(sceneConfig, new File(scenesFolder, sceneFileName));
             } catch (IOException ex) {
                 plugin.getLogger().warning("Could not save scene file " + sceneFileName + ": " + ex.getMessage());
             }
@@ -125,6 +129,23 @@ public final class CinematicManager {
         FileConfiguration config = plugin.getConfig();
         config.set("cinematics", null);
         plugin.saveConfig();
+    }
+
+    private void atomicSaveYaml(YamlConfiguration sceneConfig, File destinationFile) throws IOException {
+        File parent = destinationFile.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Could not create parent directory for " + destinationFile.getName());
+        }
+
+        Path destinationPath = destinationFile.toPath();
+        Path tempPath = destinationPath.resolveSibling(destinationPath.getFileName() + ".tmp");
+        sceneConfig.save(tempPath.toFile());
+
+        try {
+            Files.move(tempPath, destinationPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(tempPath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private Cinematic parseCinematic(ConfigurationSection sceneSection, String fallbackId) {
@@ -223,6 +244,7 @@ public final class CinematicManager {
             config.set("audio.source", audioTrack.source());
             config.set("audio.track", audioTrack.track());
             config.set("audio.startAtMillis", audioTrack.startAtMillis());
+            config.set("audio.playCommandTemplate", audioTrack.playCommandTemplate());
             config.set("audio.stopCommandTemplate", audioTrack.stopCommandTemplate());
         }
 
@@ -616,8 +638,9 @@ public final class CinematicManager {
         String source = section.getString("source", "");
         String track = section.getString("track", "");
         int startAtMillis = Math.max(0, section.getInt("startAtMillis", 0));
+        String playCommandTemplate = section.getString("playCommandTemplate", "oa play {player} {source}:{track} {\"startAtMillis\":{millis}}");
         String stopCommandTemplate = section.getString("stopCommandTemplate", "oa stop {player}");
-        CinematicAudioTrack audioTrack = new CinematicAudioTrack(source, track, startAtMillis, stopCommandTemplate);
+        CinematicAudioTrack audioTrack = new CinematicAudioTrack(source, track, startAtMillis, playCommandTemplate, stopCommandTemplate);
         return audioTrack.isConfigured() ? audioTrack : null;
     }
 
