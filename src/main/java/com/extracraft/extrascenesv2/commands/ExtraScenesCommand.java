@@ -868,14 +868,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
-            manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
-                actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
-                previewSubtitleAtTick(online, cinematic, state.tick);
-            });
+            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
+
             if (state.tick % 20 == 0) {
                 persistActorRecordingProgress(state);
             }
-            online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
+
+            online.sendActionBar(Component.text(buildRecordingActionBar(state)));
             state.tick++;
         }, 0L, 1L);
     }
@@ -1645,6 +1644,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         return null;
     }
 
+
+    private String buildRecordingActionBar(ActorRecordingState state) {
+        return C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks;
+    }
 
     private String describeEndAction(Cinematic.EndAction endAction) {
         if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
