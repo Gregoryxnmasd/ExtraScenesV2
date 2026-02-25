@@ -18,6 +18,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
     private CinematicPlaybackService playbackService;
     private TimelineEditorService timelineEditorService;
     private org.bukkit.scheduler.BukkitTask autosaveTask;
+    private ExtraScenesCommand commandExecutor;
 
     @Override
     public void onEnable() {
@@ -61,6 +62,9 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         if (playbackService != null) {
             playbackService.stopAll();
         }
+        if (commandExecutor != null) {
+            commandExecutor.shutdown();
+        }
         if (autosaveTask != null) {
             autosaveTask.cancel();
             autosaveTask = null;
@@ -85,9 +89,9 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
             return;
         }
 
-        ExtraScenesCommand executor = new ExtraScenesCommand(this, cinematicManager, playbackService, timelineEditorService);
-        command.setExecutor(executor);
-        command.setTabCompleter(executor);
-        getServer().getPluginManager().registerEvents(new ActorRecordingListener(executor), this);
+        this.commandExecutor = new ExtraScenesCommand(this, cinematicManager, playbackService, timelineEditorService);
+        command.setExecutor(commandExecutor);
+        command.setTabCompleter(commandExecutor);
+        getServer().getPluginManager().registerEvents(new ActorRecordingListener(commandExecutor), this);
     }
 }

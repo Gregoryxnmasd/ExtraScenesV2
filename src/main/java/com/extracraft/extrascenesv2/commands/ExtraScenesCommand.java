@@ -11,6 +11,7 @@ import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
 import com.extracraft.extrascenesv2.editor.TimelineEditorService;
 import com.extracraft.extrascenesv2.audio.OpenAudioCommandService;
+import com.extracraft.extrascenesv2.commands.audio.AudioCommandHandler;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -68,6 +69,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private final ActorPlaybackService actorPreviewService;
     private final TimelineEditorService timelineEditorService;
     private final OpenAudioCommandService openAudioCommandService;
+    private final AudioCommandHandler audioCommandHandler;
 
     public ExtraScenesCommand(JavaPlugin plugin, CinematicManager manager, CinematicPlaybackService playbackService, TimelineEditorService timelineEditorService) {
         this.plugin = plugin;
@@ -76,6 +78,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         this.timelineEditorService = timelineEditorService;
         this.actorPreviewService = new ActorPlaybackService(plugin);
         this.openAudioCommandService = new OpenAudioCommandService(plugin);
+        this.audioCommandHandler = new AudioCommandHandler(manager);
     }
 
     @Override
@@ -164,101 +167,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleAudio(CommandSender sender, String[] args) {
-        if (args.length < 3) {
-            sender.sendMessage(C_RED + "Usage: /scenes audio <set|clear|playtemplate|stoptemplate|show> <scene> ...");
-            return;
-        }
-
-        String mode = args[1].toLowerCase(Locale.ROOT);
-        String sceneId = args[2];
-
-        if ("clear".equals(mode)) {
-            if (!manager.setAudioTrack(sceneId, null)) {
-                sender.sendMessage(C_RED + "That scene does not exist.");
-                return;
-            }
-            manager.save();
-            sender.sendMessage(C_GREEN + "Audio track removed from scene " + sceneId + ".");
-            return;
-        }
-
-        if ("show".equals(mode)) {
-            Cinematic cinematic = manager.getCinematic(sceneId).orElse(null);
-            if (cinematic == null) {
-                sender.sendMessage(C_RED + "That scene does not exist.");
-                return;
-            }
-            CinematicAudioTrack track = cinematic.getAudioTrack();
-            if (track == null || !track.isConfigured()) {
-                sender.sendMessage(C_YELLOW + "Scene '" + sceneId + "' has no configured audio track.");
-                return;
-            }
-            sender.sendMessage(C_GOLD + "Audio scene '" + sceneId + "': " + C_AQUA + track.source() + ":" + track.track() + C_GRAY + " startAtMillis=" + track.startAtMillis());
-            sender.sendMessage(C_GRAY + "playTemplate: " + track.playCommandTemplate());
-            sender.sendMessage(C_GRAY + "stopTemplate: " + track.stopCommandTemplate());
-            return;
-        }
-
-        if ("playtemplate".equals(mode) || "stoptemplate".equals(mode)) {
-            if (args.length < 4) {
-                sender.sendMessage(C_RED + "Usage: /scenes audio " + mode + " <scene> <template...>");
-                return;
-            }
-
-            Cinematic cinematic = manager.getCinematic(sceneId).orElse(null);
-            if (cinematic == null) {
-                sender.sendMessage(C_RED + "That scene does not exist.");
-                return;
-            }
-
-            CinematicAudioTrack currentTrack = cinematic.getAudioTrack();
-            if (currentTrack == null || !currentTrack.isConfigured()) {
-                sender.sendMessage(C_RED + "Set source/track first: /scenes audio set <scene> <source> <track> <startAtMillis>");
-                return;
-            }
-
-            String templateInput = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
-            String normalizedTemplate = templateInput.equalsIgnoreCase("default") ? null : templateInput;
-
-            CinematicAudioTrack updatedTrack = "playtemplate".equals(mode)
-                    ? new CinematicAudioTrack(currentTrack.source(), currentTrack.track(), currentTrack.startAtMillis(), normalizedTemplate, currentTrack.stopCommandTemplate())
-                    : new CinematicAudioTrack(currentTrack.source(), currentTrack.track(), currentTrack.startAtMillis(), currentTrack.playCommandTemplate(), normalizedTemplate);
-
-            if (!manager.setAudioTrack(sceneId, updatedTrack)) {
-                sender.sendMessage(C_RED + "Could not update audio template.");
-                return;
-            }
-
-            manager.save();
-            sender.sendMessage(C_GREEN + ("playtemplate".equals(mode) ? "Play" : "Stop") + " template updated for scene '" + sceneId + "'.");
-            return;
-        }
-
-        if (!"set".equals(mode) || args.length < 6) {
-            sender.sendMessage(C_RED + "Usage: /scenes audio set <scene> <source> <track> <startAtMillis>");
-            return;
-        }
-
-        int startAtMillis;
-        try {
-            startAtMillis = Math.max(0, Integer.parseInt(args[5]));
-        } catch (NumberFormatException ex) {
-            sender.sendMessage(C_RED + "Invalid startAtMillis.");
-            return;
-        }
-
-        Cinematic existing = manager.getCinematic(sceneId).orElse(null);
-        String playTemplate = existing == null || existing.getAudioTrack() == null ? null : existing.getAudioTrack().playCommandTemplate();
-        String stopTemplate = existing == null || existing.getAudioTrack() == null ? null : existing.getAudioTrack().stopCommandTemplate();
-
-        CinematicAudioTrack track = new CinematicAudioTrack(args[3], args[4], startAtMillis, playTemplate, stopTemplate);
-        if (!manager.setAudioTrack(sceneId, track)) {
-            sender.sendMessage(C_RED + "That scene does not exist.");
-            return;
-        }
-
-        manager.save();
-        sender.sendMessage(C_GREEN + "Audio track configured for scene '" + sceneId + "'.");
+        audioCommandHandler.handle(sender, args);
     }
 
     private void handleSubtitle(CommandSender sender, String[] args) {
@@ -1740,6 +1649,16 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         return "stay at the last camera point";
+    }
+
+
+    public void shutdown() {
+        for (UUID playerId : recordings.keySet().toArray(UUID[]::new)) {
+            stopAndRemoveRecording(playerId);
+        }
+        for (UUID playerId : actorRecordings.keySet().toArray(UUID[]::new)) {
+            stopActorRecording(playerId);
+        }
     }
 
     @Override
