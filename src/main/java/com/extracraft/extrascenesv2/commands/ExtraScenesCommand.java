@@ -986,6 +986,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 player.getInventory().setItem(8, null);
             }
             actorPreviewService.cleanup(player);
+            playbackService.clearSubtitleLines(playerId);
             player.sendActionBar(Component.empty());
         }
     }

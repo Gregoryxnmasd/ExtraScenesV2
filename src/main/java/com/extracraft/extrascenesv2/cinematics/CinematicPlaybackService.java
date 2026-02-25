@@ -152,6 +152,14 @@ public final class CinematicPlaybackService {
         subtitleLine2.put(player.getUniqueId(), cue == null ? "" : cue.line2());
     }
 
+    public void clearSubtitleLines(UUID playerId) {
+        if (playerId == null) {
+            return;
+        }
+        subtitleLine1.remove(playerId);
+        subtitleLine2.remove(playerId);
+    }
+
     public boolean stop(Player player) {
         PlaybackState state = states.remove(player.getUniqueId());
         if (state == null) {
