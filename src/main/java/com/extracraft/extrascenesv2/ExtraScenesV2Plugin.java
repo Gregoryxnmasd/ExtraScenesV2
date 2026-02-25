@@ -14,6 +14,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
 
     private CinematicManager cinematicManager;
     private CinematicPlaybackService playbackService;
+    private org.bukkit.scheduler.BukkitTask autosaveTask;
 
     @Override
     public void onEnable() {
@@ -35,6 +36,12 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         new ExtraCraftSubtitleExpansion(this).register();
         getServer().getPluginManager().registerEvents(new CinematicProtectionListener(playbackService), this);
 
+        this.autosaveTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            if (cinematicManager != null) {
+                cinematicManager.save();
+            }
+        }, 20L * 15L, 20L * 15L);
+
         getLogger().info("ExtraScenesV2 (Cinematics) enabled on " + getServer().getVersion());
     }
 
@@ -42,6 +49,13 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
     public void onDisable() {
         if (playbackService != null) {
             playbackService.stopAll();
+        }
+        if (autosaveTask != null) {
+            autosaveTask.cancel();
+            autosaveTask = null;
+        }
+        if (cinematicManager != null) {
+            cinematicManager.save();
         }
     }
 

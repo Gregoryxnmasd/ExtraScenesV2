@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.extracraft</groupId>
-    <artifactId>ExtraScenesV2-Editor</artifactId>
+    <artifactId>ExtraScenesV2</artifactId>
     <version>1.1.0</version>
     <packaging>jar</packaging>
 
