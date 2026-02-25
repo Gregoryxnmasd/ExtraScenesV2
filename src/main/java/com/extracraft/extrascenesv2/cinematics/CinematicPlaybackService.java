@@ -110,7 +110,7 @@ public final class CinematicPlaybackService {
 
     public String getCurrentSceneId(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return "";
         }
         return state.cinematic.getId();
@@ -118,7 +118,7 @@ public final class CinematicPlaybackService {
 
     public int getCurrentTick(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return 0;
         }
         return Math.max(0, state.currentTick);
@@ -126,10 +126,14 @@ public final class CinematicPlaybackService {
 
     public int getCurrentEndTick(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return 0;
         }
         return Math.max(0, state.endTick);
+    }
+
+    public boolean hasPlaybackState(UUID playerId) {
+        return playerId != null && states.containsKey(playerId);
     }
 
     public String getSubtitleLine(UUID playerId, int line) {
@@ -153,6 +157,45 @@ public final class CinematicPlaybackService {
         subtitleLine1.remove(player.getUniqueId());
         subtitleLine2.remove(player.getUniqueId());
         stopAudio(player, state);
+        return true;
+    }
+
+    public boolean pause(Player player) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null || !state.running) {
+            return false;
+        }
+        cancelTask(state);
+        state.running = false;
+        stopAudio(player, state);
+        return true;
+    }
+
+    public boolean resume(Player player) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null || state.running) {
+            return false;
+        }
+        startRunning(player, state);
+        actorPlaybackService.start(player, state.cinematic, state.currentTick);
+        startAudio(player, state);
+        return true;
+    }
+
+    public boolean seek(Player player, int targetTick) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null) {
+            return false;
+        }
+
+        int clampedTick = Math.max(0, Math.min(targetTick, state.endTick));
+        state.currentTick = clampedTick;
+        renderAtTick(player, state, clampedTick, false);
+
+        if (state.running) {
+            stopAudio(player, state);
+            startAudio(player, state);
+        }
         return true;
     }
 
@@ -259,21 +302,27 @@ public final class CinematicPlaybackService {
                 return;
             }
 
-            Location destination = interpolateLocation(state.cinematic, state.currentTick);
-            if (destination == null || destination.getWorld() == null) {
-                stop(player);
-                return;
-            }
-
-            player.teleport(destination);
-            runTickCommands(player, state);
-            actorPlaybackService.tick(player, state.cinematic, state.currentTick);
-            updateSubtitles(player, state);
+            renderAtTick(player, state, state.currentTick, true);
             state.currentTick++;
         } catch (Exception ex) {
             plugin.getLogger().severe("Scene error for " + player.getName() + ": " + ex.getMessage());
             stop(player);
         }
+    }
+
+    private void renderAtTick(Player player, PlaybackState state, int tick, boolean executeTickCommands) {
+        Location destination = interpolateLocation(state.cinematic, tick);
+        if (destination == null || destination.getWorld() == null) {
+            stop(player);
+            return;
+        }
+
+        player.teleport(destination);
+        if (executeTickCommands) {
+            runTickCommands(player, state);
+        }
+        actorPlaybackService.tick(player, state.cinematic, tick);
+        updateSubtitles(player, state);
     }
 
     private void runTickCommands(Player player, PlaybackState state) {
