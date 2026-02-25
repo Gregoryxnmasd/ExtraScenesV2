@@ -36,6 +36,8 @@ public final class CinematicPlaybackService {
     private final Map<UUID, Set<String>> playedCinematics = new HashMap<>();
     private final PlaceholderResolver placeholderResolver;
     private final ActorPlaybackService actorPlaybackService;
+    private final Map<UUID, String> subtitleLine1 = new HashMap<>();
+    private final Map<UUID, String> subtitleLine2 = new HashMap<>();
     private static final double BEZIER_TENSION = 0.82;
 
     public CinematicPlaybackService(JavaPlugin plugin) {
@@ -67,8 +69,11 @@ public final class CinematicPlaybackService {
         boolean fullPlayback = safeStart == 0 && safeEnd >= maxEnd;
         PlaybackState state = new PlaybackState(cinematic, safeStart, safeEnd, fullPlayback, player.getLocation(), player.getGameMode());
         states.put(player.getUniqueId(), state);
+        subtitleLine1.put(player.getUniqueId(), "");
+        subtitleLine2.put(player.getUniqueId(), "");
         startRunning(player, state);
         actorPlaybackService.start(player, state.cinematic, state.currentTick);
+        startAudio(player, state);
         return true;
     }
 
@@ -127,6 +132,13 @@ public final class CinematicPlaybackService {
         return Math.max(0, state.endTick);
     }
 
+    public String getSubtitleLine(UUID playerId, int line) {
+        if (playerId == null) {
+            return "";
+        }
+        return line == 2 ? subtitleLine2.getOrDefault(playerId, "") : subtitleLine1.getOrDefault(playerId, "");
+    }
+
     public boolean stop(Player player) {
         PlaybackState state = states.remove(player.getUniqueId());
         if (state == null) {
@@ -138,6 +150,9 @@ public final class CinematicPlaybackService {
         clearFakeHelmet(player);
         restoreGameMode(player, state);
         actorPlaybackService.cleanup(player);
+        subtitleLine1.remove(player.getUniqueId());
+        subtitleLine2.remove(player.getUniqueId());
+        stopAudio(player, state);
         return true;
     }
 
@@ -152,6 +167,9 @@ public final class CinematicPlaybackService {
                     clearFakeHelmet(player);
                     restoreGameMode(player, state);
                     actorPlaybackService.cleanup(player);
+                    subtitleLine1.remove(playerId);
+                    subtitleLine2.remove(playerId);
+                    stopAudio(player, state);
                 }
             }
         }
@@ -169,6 +187,7 @@ public final class CinematicPlaybackService {
         clearFakeHelmet(player);
         restoreGameMode(player, state);
         actorPlaybackService.cleanup(player);
+        stopAudio(player, state);
     }
 
     public void handleJoin(Player player) {
@@ -177,8 +196,11 @@ public final class CinematicPlaybackService {
             return;
         }
 
+        subtitleLine1.put(player.getUniqueId(), "");
+        subtitleLine2.put(player.getUniqueId(), "");
         startRunning(player, state);
         actorPlaybackService.start(player, state.cinematic, state.currentTick);
+        startAudio(player, state);
     }
 
     private void startRunning(Player player, PlaybackState state) {
@@ -246,6 +268,7 @@ public final class CinematicPlaybackService {
             player.teleport(destination);
             runTickCommands(player, state);
             actorPlaybackService.tick(player, state.cinematic, state.currentTick);
+            updateSubtitles(player, state);
             state.currentTick++;
         } catch (Exception ex) {
             plugin.getLogger().severe("Scene error for " + player.getName() + ": " + ex.getMessage());
@@ -388,6 +411,36 @@ public final class CinematicPlaybackService {
     private static double smootherStep(double t) {
         double clamped = Math.max(0.0, Math.min(1.0, t));
         return clamped * clamped * clamped * (clamped * (clamped * 6.0 - 15.0) + 10.0);
+    }
+
+    private void updateSubtitles(Player player, PlaybackState state) {
+        CinematicSubtitleCue cue = state.cinematic.getSubtitleAtTick(state.currentTick);
+        String line1 = cue == null ? "" : cue.line1();
+        String line2 = cue == null ? "" : cue.line2();
+        subtitleLine1.put(player.getUniqueId(), line1);
+        subtitleLine2.put(player.getUniqueId(), line2);
+    }
+
+    private void startAudio(Player player, PlaybackState state) {
+        CinematicAudioTrack track = state.cinematic.getAudioTrack();
+        if (track == null || !track.isConfigured()) {
+            return;
+        }
+        int seekMillis = track.startAtMillis() + (state.currentTick * 50);
+        String payload = String.format("oa play %s %s {\"startAtMillis\":%d}", player.getName(), track.source() + ":" + track.track(), Math.max(0, seekMillis));
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), payload);
+    }
+
+    private void stopAudio(Player player, PlaybackState state) {
+        CinematicAudioTrack track = state.cinematic.getAudioTrack();
+        if (track == null || !track.isConfigured()) {
+            return;
+        }
+        String stopCommand = track.stopCommandTemplate().replace("{player}", player.getName());
+        if (stopCommand.startsWith("/")) {
+            stopCommand = stopCommand.substring(1);
+        }
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stopCommand);
     }
 
     private void markAsPlayed(UUID playerId, String cinematicId) {

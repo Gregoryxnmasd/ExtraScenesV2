@@ -1,9 +1,11 @@
 package com.extracraft.extrascenesv2.commands;
 
 import com.extracraft.extrascenesv2.cinematics.Cinematic;
+import com.extracraft.extrascenesv2.cinematics.CinematicAudioTrack;
 import com.extracraft.extrascenesv2.cinematics.CinematicManager;
 import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import com.extracraft.extrascenesv2.cinematics.CinematicPoint;
+import com.extracraft.extrascenesv2.cinematics.CinematicSubtitleCue;
 import com.extracraft.extrascenesv2.cinematics.SceneActor;
 import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
@@ -48,7 +50,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final String C_AQUA = "§b";
     private static final String C_DARK_AQUA = "§3";
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "delete", "list", "show", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "audio", "subtitle", "delete", "list", "show", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
     private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
     private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
@@ -89,6 +91,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "tickcmd" -> handleTickCommand(sender, args);
             case "placeholders" -> handlePlaceholders(sender);
             case "players" -> handlePlayers(sender, args);
+            case "audio" -> handleAudio(sender, args);
+            case "subtitle" -> handleSubtitle(sender, args);
             case "delete" -> handleDelete(sender, args);
             case "list" -> handleList(sender);
             case "show" -> handleShow(sender, args);
@@ -145,6 +149,119 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
         sender.sendMessage(C_YELLOW + "- /scenes players " + scene.getId() + " <hide|show>");
         sender.sendMessage(C_YELLOW + "- /scenes tickcmd add " + scene.getId() + " <tick> <command>");
+        sender.sendMessage(C_YELLOW + "- /scenes audio set " + scene.getId() + " files intro_1.mp3 1250");
+        sender.sendMessage(C_YELLOW + "- /scenes subtitle add " + scene.getId() + " <start> <end> <line1>|<line2>");
+    }
+
+    private void handleAudio(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(C_RED + "Usage: /scenes audio <set|clear> <scene> ...");
+            return;
+        }
+
+        String mode = args[1].toLowerCase(Locale.ROOT);
+        if ("clear".equals(mode)) {
+            if (!manager.setAudioTrack(args[2], null)) {
+                sender.sendMessage(C_RED + "That scene does not exist.");
+                return;
+            }
+            manager.save();
+            sender.sendMessage(C_GREEN + "Audio track removed from scene " + args[2] + ".");
+            return;
+        }
+
+        if (!"set".equals(mode) || args.length < 6) {
+            sender.sendMessage(C_RED + "Usage: /scenes audio set <scene> <source> <track> <startAtMillis> [stopCommandTemplate]");
+            return;
+        }
+
+        int startAtMillis;
+        try {
+            startAtMillis = Math.max(0, Integer.parseInt(args[5]));
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(C_RED + "Invalid startAtMillis.");
+            return;
+        }
+
+        String stopTemplate = args.length >= 7
+                ? String.join(" ", Arrays.copyOfRange(args, 6, args.length))
+                : "oa stop {player}";
+
+        CinematicAudioTrack track = new CinematicAudioTrack(args[3], args[4], startAtMillis, stopTemplate);
+        if (!manager.setAudioTrack(args[2], track)) {
+            sender.sendMessage(C_RED + "That scene does not exist.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(C_GREEN + "Audio track configured for scene '" + args[2] + "'.");
+    }
+
+    private void handleSubtitle(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(C_RED + "Usage: /scenes subtitle <add|del|clear> <scene> ...");
+            return;
+        }
+
+        String mode = args[1].toLowerCase(Locale.ROOT);
+        if ("clear".equals(mode)) {
+            if (!manager.clearSubtitles(args[2])) {
+                sender.sendMessage(C_RED + "That scene does not exist.");
+                return;
+            }
+            manager.save();
+            sender.sendMessage(C_GREEN + "Subtitles cleared for scene '" + args[2] + "'.");
+            return;
+        }
+
+        if ("del".equals(mode)) {
+            if (args.length < 4) {
+                sender.sendMessage(C_RED + "Usage: /scenes subtitle del <scene> <startTick>");
+                return;
+            }
+            int startTick;
+            try {
+                startTick = Math.max(0, Integer.parseInt(args[3]));
+            } catch (NumberFormatException ex) {
+                sender.sendMessage(C_RED + "Invalid startTick.");
+                return;
+            }
+            if (!manager.removeSubtitle(args[2], startTick)) {
+                sender.sendMessage(C_RED + "Subtitle/startTick not found.");
+                return;
+            }
+            manager.save();
+            sender.sendMessage(C_GREEN + "Subtitle deleted.");
+            return;
+        }
+
+        if (!"add".equals(mode) || args.length < 6) {
+            sender.sendMessage(C_RED + "Usage: /scenes subtitle add <scene> <startTick> <endTick> <line1>|<line2>");
+            return;
+        }
+
+        int startTick;
+        int endTick;
+        try {
+            startTick = Math.max(0, Integer.parseInt(args[3]));
+            endTick = Math.max(startTick, Integer.parseInt(args[4]));
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(C_RED + "Invalid tick values.");
+            return;
+        }
+
+        String content = String.join(" ", Arrays.copyOfRange(args, 5, args.length)).replace('&', '\u00A7');
+        String[] lines = content.split("\\|", 2);
+        String line1 = lines.length >= 1 ? lines[0] : "";
+        String line2 = lines.length == 2 ? lines[1] : "";
+
+        if (!manager.upsertSubtitle(args[2], new CinematicSubtitleCue(startTick, endTick, line1, line2))) {
+            sender.sendMessage(C_RED + "That scene does not exist.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(C_GREEN + "Subtitle added. PAPI: %extracraft_sub_1% / %extracraft_sub_2%.");
     }
 
     private void handlePlayers(CommandSender sender, String[] args) {
