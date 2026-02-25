@@ -134,6 +134,7 @@ public final class CinematicPlaybackService {
         }
 
         cancelTask(state);
+        restoreHiddenPlayers(player, state);
         clearFakeHelmet(player);
         restoreGameMode(player, state);
         actorPlaybackService.cleanup(player);
@@ -147,6 +148,7 @@ public final class CinematicPlaybackService {
                 cancelTask(state);
                 Player player = Bukkit.getPlayer(playerId);
                 if (player != null && player.isOnline()) {
+                    restoreHiddenPlayers(player, state);
                     clearFakeHelmet(player);
                     restoreGameMode(player, state);
                     actorPlaybackService.cleanup(player);
@@ -163,6 +165,7 @@ public final class CinematicPlaybackService {
 
         cancelTask(state);
         state.running = false;
+        restoreHiddenPlayers(player, state);
         clearFakeHelmet(player);
         restoreGameMode(player, state);
         actorPlaybackService.cleanup(player);
@@ -179,10 +182,42 @@ public final class CinematicPlaybackService {
     }
 
     private void startRunning(Player player, PlaybackState state) {
+        hideOtherPlayersIfNeeded(player, state);
         applyFakePumpkin(player);
         applySpectatorMode(player, state);
         state.running = true;
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> tick(player), 0L, 1L);
+    }
+
+    private void hideOtherPlayersIfNeeded(Player viewer, PlaybackState state) {
+        if (!state.cinematic.shouldHidePlayersDuringPlayback()) {
+            return;
+        }
+
+        for (Player target : Bukkit.getOnlinePlayers()) {
+            if (target.getUniqueId().equals(viewer.getUniqueId())) {
+                continue;
+            }
+
+            viewer.hidePlayer(plugin, target);
+            state.hiddenPlayers.add(target.getUniqueId());
+        }
+    }
+
+    private void restoreHiddenPlayers(Player viewer, PlaybackState state) {
+        if (state.hiddenPlayers.isEmpty()) {
+            return;
+        }
+
+        for (UUID hiddenPlayerId : state.hiddenPlayers) {
+            Player target = Bukkit.getPlayer(hiddenPlayerId);
+            if (target == null || !target.isOnline()) {
+                continue;
+            }
+
+            viewer.showPlayer(plugin, target);
+        }
+        state.hiddenPlayers.clear();
     }
 
     private void tick(Player player) {
@@ -448,6 +483,7 @@ public final class CinematicPlaybackService {
         private boolean running;
         private boolean changedGameMode;
         private BukkitTask task;
+        private final Set<UUID> hiddenPlayers = new HashSet<>();
 
         private PlaybackState(Cinematic cinematic, int startTick, int endTick, boolean fullPlayback, Location startLocation, GameMode originalGameMode) {
             this.cinematic = cinematic;

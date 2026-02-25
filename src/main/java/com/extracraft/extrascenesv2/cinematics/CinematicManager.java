@@ -148,7 +148,8 @@ public final class CinematicManager {
         Map<Integer, List<String>> tickCommands = parseTickCommands(sceneSection.getConfigurationSection("tickCommands"));
         Cinematic.EndAction endAction = parseEndAction(sceneSection.getConfigurationSection("endAction"));
         Map<String, SceneActor> actors = parseActors(sceneSection.getConfigurationSection("actors"));
-        return new Cinematic(id, durationTicks, points, endAction, tickCommands, actors);
+        boolean hidePlayersDuringPlayback = sceneSection.getBoolean("hidePlayersDuringPlayback", false);
+        return new Cinematic(id, durationTicks, points, endAction, tickCommands, actors, hidePlayersDuringPlayback);
     }
 
     private void writeCinematic(YamlConfiguration config, Cinematic cinematic) {
@@ -169,6 +170,7 @@ public final class CinematicManager {
         }
 
         config.set("durationTicks", cinematic.getDurationTicks());
+        config.set("hidePlayersDuringPlayback", cinematic.shouldHidePlayersDuringPlayback());
         config.set("points", serializedPoints);
         config.set("tickCommands", null);
         for (Map.Entry<Integer, List<String>> entry : cinematic.getTickCommands().entrySet()) {
@@ -239,7 +241,7 @@ public final class CinematicManager {
         if (cinematics.containsKey(key)) {
             return false;
         }
-        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint(), Map.of(), Map.of()));
+        cinematics.put(key, new Cinematic(id, durationTicks, List.of(), Cinematic.EndAction.stayAtLastCameraPoint(), Map.of(), Map.of(), false));
         return true;
     }
 
@@ -261,7 +263,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), durationTicks, cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -276,7 +278,7 @@ public final class CinematicManager {
         updated.removeIf(p -> p.tick() == tick);
         updated.add(new CinematicPoint(Math.max(0, tick), location.clone(), interpolationMode));
         updated.sort(Comparator.comparingInt(CinematicPoint::tick));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -293,7 +295,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -322,7 +324,7 @@ public final class CinematicManager {
             return false;
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), updated, cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -332,7 +334,7 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), List.of(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -342,7 +344,17 @@ public final class CinematicManager {
         if (cinematic == null) {
             return false;
         }
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction, cinematic.getTickCommands(), cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), endAction, cinematic.getTickCommands(), cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
+        return true;
+    }
+
+    public boolean setHidePlayersDuringPlayback(String id, boolean hidePlayersDuringPlayback) {
+        String key = normalizeId(id);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), cinematic.getActors(), hidePlayersDuringPlayback));
         return true;
     }
 
@@ -362,7 +374,7 @@ public final class CinematicManager {
         List<String> commandsAtTick = new ArrayList<>(updated.getOrDefault(Math.max(0, tick), List.of()));
         commandsAtTick.add(normalizedCommand);
         updated.put(Math.max(0, tick), commandsAtTick);
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -387,7 +399,7 @@ public final class CinematicManager {
             updated.put(safeTick, commandsAtTick);
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -405,7 +417,7 @@ public final class CinematicManager {
             updated.remove(Math.max(0, tick));
         }
 
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors()));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), updated, cinematic.getActors(), cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -426,7 +438,7 @@ public final class CinematicManager {
             current = current.withProfile(displayName, skinTexture, skinSignature, scale, null, null);
         }
         updatedActors.put(actorKey, current);
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors, cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -453,7 +465,7 @@ public final class CinematicManager {
         }
 
         updatedActors.put(actorKey, actor.withFrames(frames));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors, cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 
@@ -473,7 +485,7 @@ public final class CinematicManager {
         }
 
         updatedActors.put(actorKey, actor.withProfile(null, null, null, null, appearAtTick, disappearAtTick));
-        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors));
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors, cinematic.shouldHidePlayersDuringPlayback()));
         return true;
     }
 

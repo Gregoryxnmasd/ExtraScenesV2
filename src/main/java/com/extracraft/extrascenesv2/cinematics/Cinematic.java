@@ -15,23 +15,31 @@ public final class Cinematic {
     private final EndAction endAction;
     private final Map<Integer, List<String>> tickCommands;
     private final Map<String, SceneActor> actors;
+    private final boolean hidePlayersDuringPlayback;
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points) {
-        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of(), Map.of());
+        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of(), Map.of(), false);
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction) {
-        this(id, durationTicks, points, endAction, Map.of(), Map.of());
+        this(id, durationTicks, points, endAction, Map.of(), Map.of(), false);
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
                      Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors) {
+        this(id, durationTicks, points, endAction, tickCommands, actors, false);
+    }
+
+    public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
+                     Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors,
+                     boolean hidePlayersDuringPlayback) {
         this.id = id;
         this.durationTicks = Math.max(1, durationTicks);
         this.points = new ArrayList<>(points);
         this.endAction = endAction == null ? EndAction.stayAtLastCameraPoint() : endAction;
         this.tickCommands = deepCopyTickCommands(tickCommands);
         this.actors = deepCopyActors(actors);
+        this.hidePlayersDuringPlayback = hidePlayersDuringPlayback;
     }
 
     public String getId() {
@@ -60,6 +68,10 @@ public final class Cinematic {
 
     public Map<String, SceneActor> getActors() {
         return actors;
+    }
+
+    public boolean shouldHidePlayersDuringPlayback() {
+        return hidePlayersDuringPlayback;
     }
 
 
