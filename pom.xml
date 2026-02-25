@@ -8,7 +8,7 @@
     <version>1.1.0</version>
     <packaging>jar</packaging>
 
-    <name>ExtraScenesV2</name>
+    <name>ExtraScenesV2-Editor</name>
     <description>Minecraft plugin base (1.21.8+) ready for network/bungee integration.</description>
 
     <properties>
