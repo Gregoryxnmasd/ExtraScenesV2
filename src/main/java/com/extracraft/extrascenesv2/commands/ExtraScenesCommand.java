@@ -93,7 +93,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "show" -> handleShow(sender, args);
             case "reload" -> {
                 manager.load();
-                sender.sendMessage(C_GREEN + "Scenes reloaded from config.yml.");
+                sender.sendMessage(C_GREEN + "Scenes reloaded from scene files.");
             }
             default -> sendHelp(sender, label);
         }
@@ -147,7 +147,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handlePlay(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(C_RED + "Usage: /scenes play <scene> [startTick] [endTick]");
+            sender.sendMessage(C_RED + "Usage: /scenes play <scene> [player] [startTick] [endTick]");
             return;
         }
 
@@ -157,38 +157,57 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(C_RED + "Only players can use /scenes play.");
-            return;
+        Player target = null;
+        int argIndex = 2;
+
+        if (args.length >= 3) {
+            try {
+                Integer.parseInt(args[2]);
+            } catch (NumberFormatException ex) {
+                target = Bukkit.getPlayerExact(args[2]);
+                if (target == null) {
+                    sender.sendMessage(C_RED + "Player not found: " + args[2]);
+                    return;
+                }
+                argIndex = 3;
+            }
+        }
+
+        if (target == null) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(C_RED + "Console must provide a target player: /scenes play <scene> <player> [startTick] [endTick]");
+                return;
+            }
+            target = player;
         }
 
         int startTick = 0;
         Integer endTick = null;
 
-        if (args.length >= 3) {
+        if (args.length >= argIndex + 1) {
             try {
-                startTick = Math.max(0, Integer.parseInt(args[2]));
+                startTick = Math.max(0, Integer.parseInt(args[argIndex]));
             } catch (NumberFormatException ex) {
                 sender.sendMessage(C_RED + "Invalid startTick.");
                 return;
             }
         }
 
-        if (args.length >= 4) {
+        if (args.length >= argIndex + 2) {
             try {
-                endTick = Math.max(startTick, Integer.parseInt(args[3]));
+                endTick = Math.max(startTick, Integer.parseInt(args[argIndex + 1]));
             } catch (NumberFormatException ex) {
                 sender.sendMessage(C_RED + "Invalid endTick.");
                 return;
             }
         }
 
-        if (!playbackService.play(player, cinematic, startTick, endTick)) {
+        if (!playbackService.play(target, cinematic, startTick, endTick)) {
             sender.sendMessage(C_RED + "This scene has no keyframes.");
             return;
         }
 
-        sender.sendMessage(C_GREEN + "Playing scene '" + cinematic.getId() + "'.");
+        sender.sendMessage(C_GREEN + "Playing scene '" + cinematic.getId() + "' for " + target.getName() + ".");
     }
 
     private void handleStop(CommandSender sender, String[] args) {
@@ -1134,7 +1153,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_GOLD + "ExtraScenesV2 - commands /" + label + ":");
         sender.sendMessage(C_YELLOW + "/scenes create <scene> <durationTicks>");
         sender.sendMessage(C_YELLOW + "/scenes edit <scene>");
-        sender.sendMessage(C_YELLOW + "/scenes play <scene> [startTick] [endTick]");
+        sender.sendMessage(C_YELLOW + "/scenes play <scene> [player] [startTick] [endTick]");
         sender.sendMessage(C_YELLOW + "/scenes stop");
         sender.sendMessage(C_YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
         sender.sendMessage(C_YELLOW + "/scenes record stop");
@@ -1274,7 +1293,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
 
-        if (args.length == 3 && Arrays.asList("play", "edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("play")) {
+            List<String> options = new ArrayList<>();
+            Bukkit.getOnlinePlayers().stream().map(Player::getName).forEach(options::add);
+            options.add("0");
+            return options.stream().filter(option -> option.toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        }
+
+        if (args.length == 3 && Arrays.asList("edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Collections.emptyList();
         }
 
