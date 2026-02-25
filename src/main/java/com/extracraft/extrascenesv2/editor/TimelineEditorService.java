@@ -22,6 +22,7 @@ public final class TimelineEditorService {
     private final CinematicManager manager;
     private final CinematicPlaybackService playbackService;
     private final Map<UUID, EditorSession> sessions = new HashMap<>();
+    private static final int[] EDITOR_SLOTS = {0, 1, 2, 4, 6, 7, 8};
 
     public TimelineEditorService(CinematicManager manager, CinematicPlaybackService playbackService) {
         this.manager = manager;
@@ -50,11 +51,11 @@ public final class TimelineEditorService {
 
     public boolean close(Player player) {
         EditorSession session = sessions.remove(player.getUniqueId());
-        playbackService.stop(player);
         if (session == null) {
             return false;
         }
-        clearEditorHotbar(player);
+        playbackService.stop(player);
+        restoreOriginalHotbar(player, session);
         player.sendMessage(C_GREEN + "Editor cerrado para escena '" + session.sceneId + "'.");
         return true;
     }
@@ -153,6 +154,14 @@ public final class TimelineEditorService {
     }
 
     private void giveEditorHotbar(Player player) {
+        EditorSession session = sessions.get(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+        for (int slot : EDITOR_SLOTS) {
+            session.originalHotbar.put(slot, cloneIfPresent(player.getInventory().getItem(slot)));
+        }
+
         player.getInventory().setItem(0, named(Material.RED_STAINED_GLASS_PANE, "[Timeline] -20t"));
         player.getInventory().setItem(1, named(Material.ORANGE_STAINED_GLASS_PANE, "[Timeline] -5t"));
         player.getInventory().setItem(2, named(Material.YELLOW_STAINED_GLASS_PANE, "[Timeline] -1t"));
@@ -162,13 +171,20 @@ public final class TimelineEditorService {
         player.getInventory().setItem(8, named(Material.PURPLE_STAINED_GLASS_PANE, "[Timeline] +20t"));
     }
 
-    private void clearEditorHotbar(Player player) {
-        for (int slot : new int[]{0, 1, 2, 4, 6, 7, 8}) {
-            ItemStack item = player.getInventory().getItem(slot);
-            if (isEditorItem(item)) {
-                player.getInventory().setItem(slot, null);
+    private void restoreOriginalHotbar(Player player, EditorSession session) {
+        for (int slot : EDITOR_SLOTS) {
+            ItemStack current = player.getInventory().getItem(slot);
+            if (!isEditorItem(current)) {
+                continue;
             }
+
+            ItemStack original = session.originalHotbar.get(slot);
+            player.getInventory().setItem(slot, cloneIfPresent(original));
         }
+    }
+
+    private ItemStack cloneIfPresent(ItemStack item) {
+        return item == null ? null : item.clone();
     }
 
     private ItemStack named(Material material, String name) {
@@ -185,6 +201,7 @@ public final class TimelineEditorService {
         private final String sceneId;
         private int tick;
         private boolean playing;
+        private final Map<Integer, ItemStack> originalHotbar = new HashMap<>();
 
         private EditorSession(String sceneId, int tick) {
             this.sceneId = sceneId;

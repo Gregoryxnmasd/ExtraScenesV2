@@ -110,7 +110,7 @@ public final class CinematicPlaybackService {
 
     public String getCurrentSceneId(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return "";
         }
         return state.cinematic.getId();
@@ -118,7 +118,7 @@ public final class CinematicPlaybackService {
 
     public int getCurrentTick(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return 0;
         }
         return Math.max(0, state.currentTick);
@@ -126,10 +126,14 @@ public final class CinematicPlaybackService {
 
     public int getCurrentEndTick(UUID playerId) {
         PlaybackState state = states.get(playerId);
-        if (state == null || !state.running) {
+        if (state == null) {
             return 0;
         }
         return Math.max(0, state.endTick);
+    }
+
+    public boolean hasPlaybackState(UUID playerId) {
+        return playerId != null && states.containsKey(playerId);
     }
 
     public String getSubtitleLine(UUID playerId, int line) {
