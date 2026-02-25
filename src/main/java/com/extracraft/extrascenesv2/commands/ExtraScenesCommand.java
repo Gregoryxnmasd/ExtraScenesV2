@@ -109,8 +109,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "show" -> handleShow(sender, args);
             case "editor" -> handleEditor(sender, args);
             case "reload" -> {
+                shutdown();
+                playbackService.stopAll();
+                plugin.reloadConfig();
                 manager.load();
-                sender.sendMessage(C_GREEN + "Scenes reloaded from scene files.");
+                sender.sendMessage(C_GREEN + "Scenes reloaded from scene files and plugin config.");
             }
             default -> sendHelp(sender, label);
         }
