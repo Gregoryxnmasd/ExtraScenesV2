@@ -1,1 +1,3 @@
-cinematics: {}
+network:
+  bungee:
+    enabled: true
