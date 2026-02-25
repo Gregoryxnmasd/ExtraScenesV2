@@ -740,6 +740,15 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         int startTick;
         if (args.length >= 6 && args[5].equalsIgnoreCase("current")) {
+            if (!playbackService.hasPlaybackState(player.getUniqueId())) {
+                sender.sendMessage(C_RED + "No hay reproducción/editor activo para usar 'current'.");
+                return;
+            }
+            String currentSceneId = playbackService.getCurrentSceneId(player.getUniqueId());
+            if (!currentSceneId.equalsIgnoreCase(args[3])) {
+                sender.sendMessage(C_RED + "'current' solo puede usarse si estás en la misma escena ('" + currentSceneId + "').");
+                return;
+            }
             startTick = playbackService.getCurrentTick(player.getUniqueId());
         } else if (args.length >= 6) {
             try {

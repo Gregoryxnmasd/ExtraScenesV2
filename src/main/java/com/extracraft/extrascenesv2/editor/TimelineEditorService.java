@@ -119,6 +119,15 @@ public final class TimelineEditorService {
         return sessions.containsKey(player.getUniqueId());
     }
 
+    public boolean isEditorSlot(int slot) {
+        for (int editorSlot : EDITOR_SLOTS) {
+            if (editorSlot == slot) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isEditorItem(ItemStack item) {
         if (item == null || item.getType() == Material.AIR || !item.hasItemMeta()) {
             return false;
