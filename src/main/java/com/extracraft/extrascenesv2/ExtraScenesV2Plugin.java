@@ -5,6 +5,7 @@ import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import com.extracraft.extrascenesv2.commands.ExtraScenesCommand;
 import com.extracraft.extrascenesv2.listeners.ActorRecordingListener;
 import com.extracraft.extrascenesv2.listeners.CinematicProtectionListener;
+import com.extracraft.extrascenesv2.placeholders.ExtraCraftSubtitleExpansion;
 import com.extracraft.extrascenesv2.placeholders.ScenesPlaceholderExpansion;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -31,6 +32,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
 
         registerCommands();
         new ScenesPlaceholderExpansion(this).register();
+        new ExtraCraftSubtitleExpansion(this).register();
         getServer().getPluginManager().registerEvents(new CinematicProtectionListener(playbackService), this);
 
         getLogger().info("ExtraScenesV2 (Cinematics) enabled on " + getServer().getVersion());

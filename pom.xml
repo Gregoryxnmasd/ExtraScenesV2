@@ -4,11 +4,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.extracraft</groupId>
-    <artifactId>ExtraScenesV2</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <artifactId>ExtraScenesV2-Editor</artifactId>
+    <version>1.1.0</version>
     <packaging>jar</packaging>
 
-    <name>ExtraScenesV2</name>
+    <name>ExtraScenesV2-Editor</name>
     <description>Minecraft plugin base (1.21.8+) ready for network/bungee integration.</description>
 
     <properties>
