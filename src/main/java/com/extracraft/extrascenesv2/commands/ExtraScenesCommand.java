@@ -868,13 +868,29 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
-            manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
+            manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
+                actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
+                previewSubtitleAtTick(online, cinematic, state.tick);
+            });
             if (state.tick % 20 == 0) {
                 persistActorRecordingProgress(state);
             }
             online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
         }, 0L, 1L);
+    }
+
+    private void previewSubtitleAtTick(Player player, Cinematic cinematic, int tick) {
+        if (player == null || cinematic == null) {
+            return;
+        }
+        CinematicSubtitleCue cue = cinematic.getSubtitleAtTick(tick);
+        String line1 = cue == null ? "" : cue.line1();
+        String line2 = cue == null ? "" : cue.line2();
+        if (line1.isBlank() && line2.isBlank()) {
+            return;
+        }
+        player.sendActionBar(Component.text(C_AQUA + line1 + (line2.isBlank() ? "" : C_GRAY + " | " + C_AQUA + line2)));
     }
 
     private void startActorRecordingAudio(Player player, ActorRecordingState state) {
@@ -962,6 +978,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 player.getInventory().setItem(8, null);
             }
             actorPreviewService.cleanup(player);
+            player.sendActionBar(Component.empty());
         }
     }
 
