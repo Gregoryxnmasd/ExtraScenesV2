@@ -19,23 +19,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-=======
-import java.util.regex.Pattern;
-
->>>>>>> Stashed changes
-=======
-import java.util.regex.Pattern;
-
->>>>>>> Stashed changes
-=======
-import java.util.regex.Pattern;
-
->>>>>>> Stashed changes
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.title.Title;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
