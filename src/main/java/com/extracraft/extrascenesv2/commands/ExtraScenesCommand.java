@@ -470,7 +470,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActor(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|record|recordfrom>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|select|record|recordfrom>");
             return;
         }
 
@@ -479,10 +479,27 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "skin" -> handleActorSkin(sender, args);
             case "scale" -> handleActorScale(sender, args);
             case "window" -> handleActorWindow(sender, args);
+            case "select" -> handleActorSelect(sender, args);
             case "record" -> handleActorRecord(sender, args);
             case "recordfrom" -> handleActorRecordFrom(sender, args);
-            default -> sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|record|recordfrom>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|select|record|recordfrom>");
         }
+    }
+
+    private void handleActorSelect(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(C_RED + "Solo jugadores.");
+            return;
+        }
+        if (args.length < 3) {
+            sender.sendMessage(C_RED + "Usage: /scenes actor select <actorId>");
+            return;
+        }
+        if (!timelineEditorService.setSelectedActor(player, args[2])) {
+            sender.sendMessage(C_RED + "Actor inválido o no hay editor abierto.");
+            return;
+        }
+        sender.sendMessage(C_GREEN + "Actor del editor seleccionado: " + args[2]);
     }
 
     private void handleActorCreate(CommandSender sender, String[] args) {
@@ -1452,7 +1469,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 2) {
-            player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to|actor|record>");
+            player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
             return;
         }
 
@@ -1522,31 +1539,12 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage(C_RED + "No hay sesión de editor activa.");
                 }
             }
-            case "actor" -> {
-                if (args.length < 3) {
-                    player.sendMessage(C_RED + "Usage: /scenes editor actor <actorId>");
-                    return;
-                }
-                if (!timelineEditorService.setSelectedActor(player, args[2])) {
-                    player.sendMessage(C_RED + "Actor inválido o no hay sesión de editor activa.");
-                    return;
-                }
-                player.sendMessage(C_GREEN + "Actor del editor seleccionado: " + args[2]);
+            case "actor", "record" -> {
+                player.sendMessage(C_YELLOW + "Los comandos de actor se gestionan desde /scenes actor para evitar duplicados.");
+                player.sendMessage(C_YELLOW + "- Selección en editor: /scenes actor select <actorId>");
+                player.sendMessage(C_YELLOW + "- Grabar desde tick actual: /scenes actor recordfrom <scene> <actorId> current [duration]");
             }
-            case "record" -> {
-                Integer durationTicks = null;
-                if (args.length >= 3) {
-                    durationTicks = parseDurationTicks(args[2]);
-                    if (durationTicks == null) {
-                        player.sendMessage(C_RED + "Duración inválida. Usa 10s o 200t.");
-                        return;
-                    }
-                }
-                if (!timelineEditorService.startSelectedActorRecording(player, durationTicks)) {
-                    player.sendMessage(C_RED + "No se pudo iniciar recording desde editor.");
-                }
-            }
-            default -> player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to|actor|record>");
+            default -> player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
         }
     }
 
@@ -1563,8 +1561,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
         sender.sendMessage(C_YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(C_YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
+        sender.sendMessage(C_YELLOW + "/scenes actor select <actorId> (con editor abierto)");
         sender.sendMessage(C_YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
         sender.sendMessage(C_YELLOW + "/scenes actor record stop");
+        sender.sendMessage(C_YELLOW + "/scenes actor recordfrom <scene> <actorId> <startTick|current> [duration]");
         sender.sendMessage(C_YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
         sender.sendMessage(C_YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
         sender.sendMessage(C_YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
@@ -1575,7 +1575,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes players <scene> <hide|show>");
         sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
         sender.sendMessage(C_YELLOW + "/scenes audio <set|clear|playtemplate|stoptemplate|show> ...");
-        sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to|actor|record>");
+        sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to>");
         sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
 
@@ -1675,7 +1675,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("start", "stop", "clear");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
-            return List.of("create", "skin", "scale", "window", "record", "recordfrom");
+            return List.of("create", "skin", "scale", "window", "select", "record", "recordfrom");
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("audio")) {
@@ -1686,18 +1686,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("editor")) {
-            return List.of("open", "close", "play", "pause", "seek", "to", "actor", "record");
+            return List.of("open", "close", "play", "pause", "seek", "to");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("open")) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("record")) {
-            return List.of("10s", "200t");
-        }
-
-        if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("actor") && sender instanceof Player player) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("select") && sender instanceof Player player) {
             String sceneId = timelineEditorService.getSceneId(player);
             if (sceneId == null) {
                 return Collections.emptyList();
