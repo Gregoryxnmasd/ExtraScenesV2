@@ -33,6 +33,12 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         this.cinematicManager.load();
 
         this.playbackService = new CinematicPlaybackService(this);
+        boolean openAudioAvailable = getServer().getPluginManager().getPlugin("OpenAudioMc") != null
+                || getServer().getPluginManager().getPlugin("OpenAudioMC") != null;
+        if (!openAudioAvailable) {
+            getLogger().warning("OpenAudioMC no detectado. La edición/reproducción seguirá funcionando sin audio OA.");
+        }
+
         this.timelineEditorService = new TimelineEditorService(cinematicManager, playbackService);
 
         registerCommands();
@@ -45,7 +51,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
             if (cinematicManager != null) {
                 cinematicManager.save();
             }
-        }, 20L * 15L, 20L * 15L);
+        }, 20L, 20L);
 
         getLogger().info("ExtraScenesV2 (Cinematics) enabled on " + getServer().getVersion());
     }
