@@ -888,6 +888,19 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }, 0L, 1L);
     }
 
+    private void previewSubtitleAtTick(Player player, Cinematic cinematic, int tick) {
+        if (player == null || cinematic == null) {
+            return;
+        }
+        CinematicSubtitleCue cue = cinematic.getSubtitleAtTick(tick);
+        String line1 = cue == null ? "" : cue.line1();
+        String line2 = cue == null ? "" : cue.line2();
+        if (line1.isBlank() && line2.isBlank()) {
+            return;
+        }
+        player.sendActionBar(Component.text(C_AQUA + line1 + (line2.isBlank() ? "" : C_GRAY + " | " + C_AQUA + line2)));
+    }
+
     private void startActorRecordingAudio(Player player, ActorRecordingState state) {
         Cinematic cinematic = manager.getCinematic(state.sceneId).orElse(null);
         if (cinematic == null) {
