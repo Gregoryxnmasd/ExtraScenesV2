@@ -16,23 +16,26 @@ public final class Cinematic {
     private final Map<Integer, List<String>> tickCommands;
     private final Map<String, SceneActor> actors;
     private final boolean hidePlayersDuringPlayback;
+    private final CinematicAudioTrack audioTrack;
+    private final List<CinematicSubtitleCue> subtitleCues;
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points) {
-        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of(), Map.of(), false);
+        this(id, durationTicks, points, EndAction.stayAtLastCameraPoint(), Map.of(), Map.of(), false, null, List.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction) {
-        this(id, durationTicks, points, endAction, Map.of(), Map.of(), false);
+        this(id, durationTicks, points, endAction, Map.of(), Map.of(), false, null, List.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
                      Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors) {
-        this(id, durationTicks, points, endAction, tickCommands, actors, false);
+        this(id, durationTicks, points, endAction, tickCommands, actors, false, null, List.of());
     }
 
     public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
                      Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors,
-                     boolean hidePlayersDuringPlayback) {
+                     boolean hidePlayersDuringPlayback, CinematicAudioTrack audioTrack,
+                     List<CinematicSubtitleCue> subtitleCues) {
         this.id = id;
         this.durationTicks = Math.max(1, durationTicks);
         this.points = new ArrayList<>(points);
@@ -40,6 +43,10 @@ public final class Cinematic {
         this.tickCommands = deepCopyTickCommands(tickCommands);
         this.actors = deepCopyActors(actors);
         this.hidePlayersDuringPlayback = hidePlayersDuringPlayback;
+        this.audioTrack = audioTrack;
+        this.subtitleCues = subtitleCues == null ? List.of() : subtitleCues.stream()
+                .sorted(java.util.Comparator.comparingInt(CinematicSubtitleCue::startTick))
+                .toList();
     }
 
     public String getId() {
@@ -72,6 +79,23 @@ public final class Cinematic {
 
     public boolean shouldHidePlayersDuringPlayback() {
         return hidePlayersDuringPlayback;
+    }
+
+    public CinematicAudioTrack getAudioTrack() {
+        return audioTrack;
+    }
+
+    public List<CinematicSubtitleCue> getSubtitleCues() {
+        return subtitleCues;
+    }
+
+    public CinematicSubtitleCue getSubtitleAtTick(int tick) {
+        for (CinematicSubtitleCue cue : subtitleCues) {
+            if (cue.matchesTick(tick)) {
+                return cue;
+            }
+        }
+        return null;
     }
 
 
