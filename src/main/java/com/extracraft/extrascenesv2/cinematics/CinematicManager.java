@@ -98,19 +98,37 @@ public final class CinematicManager {
             return;
         }
 
+        File actorRecordingsFolder = getActorRecordingsFolder();
+        if (!actorRecordingsFolder.exists() && !actorRecordingsFolder.mkdirs()) {
+            plugin.getLogger().warning("Could not create actor recordings folder at " + actorRecordingsFolder.getAbsolutePath());
+            return;
+        }
+
         Set<String> expectedSceneFiles = new HashSet<>();
+        Set<String> expectedActorRecordingFiles = new HashSet<>();
 
         for (Cinematic cinematic : cinematics.values()) {
-            String sceneFileName = normalizeId(cinematic.getId()) + ".yml";
+            String normalizedSceneId = normalizeId(cinematic.getId());
+            String sceneFileName = normalizedSceneId + ".yml";
+            String actorRecordingFileName = normalizedSceneId + ".yml";
             expectedSceneFiles.add(sceneFileName);
+            expectedActorRecordingFiles.add(actorRecordingFileName);
 
             YamlConfiguration sceneConfig = new YamlConfiguration();
+            YamlConfiguration actorRecordingsConfig = new YamlConfiguration();
             writeCinematic(sceneConfig, cinematic);
+            writeActorRecordings(actorRecordingsConfig, cinematic);
 
             try {
                 atomicSaveYaml(sceneConfig, new File(scenesFolder, sceneFileName));
             } catch (IOException ex) {
                 plugin.getLogger().warning("Could not save scene file " + sceneFileName + ": " + ex.getMessage());
+            }
+
+            try {
+                atomicSaveYaml(actorRecordingsConfig, new File(actorRecordingsFolder, actorRecordingFileName));
+            } catch (IOException ex) {
+                plugin.getLogger().warning("Could not save actor recording file " + actorRecordingFileName + ": " + ex.getMessage());
             }
         }
 
@@ -122,6 +140,18 @@ public final class CinematicManager {
                 }
                 if (!existingSceneFile.delete()) {
                     plugin.getLogger().warning("Could not delete removed scene file " + existingSceneFile.getName());
+                }
+            }
+        }
+
+        File[] existingActorRecordingFiles = actorRecordingsFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (existingActorRecordingFiles != null) {
+            for (File existingActorRecordingFile : existingActorRecordingFiles) {
+                if (expectedActorRecordingFiles.contains(existingActorRecordingFile.getName())) {
+                    continue;
+                }
+                if (!existingActorRecordingFile.delete()) {
+                    plugin.getLogger().warning("Could not delete removed actor recording file " + existingActorRecordingFile.getName());
                 }
             }
         }
@@ -175,7 +205,8 @@ public final class CinematicManager {
         points.sort(Comparator.comparingInt(CinematicPoint::tick));
         Map<Integer, List<String>> tickCommands = parseTickCommands(sceneSection.getConfigurationSection("tickCommands"));
         Cinematic.EndAction endAction = parseEndAction(sceneSection.getConfigurationSection("endAction"));
-        Map<String, SceneActor> actors = parseActors(sceneSection.getConfigurationSection("actors"));
+        Map<String, List<ActorFrame>> actorFrames = loadActorFramesFile(normalizeId(id));
+        Map<String, SceneActor> actors = parseActors(sceneSection.getConfigurationSection("actors"), actorFrames);
         boolean hidePlayersDuringPlayback = sceneSection.getBoolean("hidePlayersDuringPlayback", false);
         CinematicAudioTrack audioTrack = parseAudioTrack(sceneSection.getConfigurationSection("audio"));
         List<CinematicSubtitleCue> subtitleCues = parseSubtitles(sceneSection.getConfigurationSection("subtitles"));
@@ -216,26 +247,6 @@ public final class CinematicManager {
             config.set(actorPath + ".skin.signature", actor.skinSignature());
             config.set(actorPath + ".appearAtTick", actor.appearAtTick());
             config.set(actorPath + ".disappearAtTick", actor.disappearAtTick());
-
-            List<Map<String, Object>> frameList = new ArrayList<>();
-            for (ActorFrame frame : actor.frames()) {
-                Location frameLoc = frame.location();
-                if (frameLoc == null || frameLoc.getWorld() == null) {
-                    continue;
-                }
-                Map<String, Object> serialized = new LinkedHashMap<>();
-                serialized.put("tick", frame.tick());
-                serialized.put("world", frameLoc.getWorld().getName());
-                serialized.put("x", frameLoc.getX());
-                serialized.put("y", frameLoc.getY());
-                serialized.put("z", frameLoc.getZ());
-                serialized.put("yaw", frameLoc.getYaw());
-                serialized.put("pitch", frameLoc.getPitch());
-                serialized.put("headYaw", frame.headYaw());
-                serialized.put("pose", frame.pose());
-                frameList.add(serialized);
-            }
-            config.set(actorPath + ".frames", frameList);
         }
 
         config.set("audio", null);
@@ -276,6 +287,33 @@ public final class CinematicManager {
 
     private File getScenesFolder() {
         return new File(plugin.getDataFolder(), "scenes");
+    }
+
+    private File getActorRecordingsFolder() {
+        return new File(getScenesFolder(), "actor-recordings");
+    }
+
+    private Map<String, List<ActorFrame>> loadActorFramesFile(String sceneId) {
+        File actorFile = new File(getActorRecordingsFolder(), sceneId + ".yml");
+        if (!actorFile.exists()) {
+            return Map.of();
+        }
+
+        YamlConfiguration actorConfig = YamlConfiguration.loadConfiguration(actorFile);
+        ConfigurationSection actorsSection = actorConfig.getConfigurationSection("actors");
+        if (actorsSection == null) {
+            return Map.of();
+        }
+
+        Map<String, List<ActorFrame>> actorFrames = new LinkedHashMap<>();
+        for (String actorId : actorsSection.getKeys(false)) {
+            ConfigurationSection actorSection = actorsSection.getConfigurationSection(actorId);
+            if (actorSection == null) {
+                continue;
+            }
+            actorFrames.put(normalizeId(actorId), parseActorFrames(actorSection.getMapList("frames")));
+        }
+        return actorFrames;
     }
 
     private String stripExtension(String fileName) {
@@ -664,7 +702,7 @@ public final class CinematicManager {
         return cues;
     }
 
-    private Map<String, SceneActor> parseActors(ConfigurationSection section) {
+    private Map<String, SceneActor> parseActors(ConfigurationSection section, Map<String, List<ActorFrame>> actorFrames) {
         if (section == null) {
             return Map.of();
         }
@@ -683,30 +721,64 @@ public final class CinematicManager {
             String texture = actorSection.getString("skin.texture");
             String signature = actorSection.getString("skin.signature");
 
-            List<ActorFrame> frames = new ArrayList<>();
-            for (Map<?, ?> frameMap : actorSection.getMapList("frames")) {
-                World world = Bukkit.getWorld(String.valueOf(frameMap.get("world")));
-                if (world == null) {
-                    continue;
-                }
-                Object tickValue = frameMap.containsKey("tick") ? frameMap.get("tick") : 0;
-                int tick = Math.max(0, (int) asDouble(tickValue));
-                Location loc = new Location(
-                        world,
-                        asDouble(frameMap.get("x")),
-                        asDouble(frameMap.get("y")),
-                        asDouble(frameMap.get("z")),
-                        (float) asDouble(frameMap.containsKey("yaw") ? frameMap.get("yaw") : 0),
-                        (float) asDouble(frameMap.containsKey("pitch") ? frameMap.get("pitch") : 0));
-                float headYaw = (float) asDouble(frameMap.containsKey("headYaw") ? frameMap.get("headYaw") : loc.getYaw());
-                String pose = String.valueOf(frameMap.containsKey("pose") ? frameMap.get("pose") : "STANDING");
-                frames.add(new ActorFrame(tick, loc, headYaw, pose));
+            List<ActorFrame> frames = actorFrames.get(normalizeId(actorId));
+            if (frames == null) {
+                frames = parseActorFrames(actorSection.getMapList("frames"));
             }
 
             actors.put(normalizeId(actorId), new SceneActor(actorId, displayName, texture, signature, scale, appearAt, disappearAt, frames));
         }
 
         return actors;
+    }
+
+    private List<ActorFrame> parseActorFrames(List<Map<?, ?>> serializedFrames) {
+        List<ActorFrame> frames = new ArrayList<>();
+        for (Map<?, ?> frameMap : serializedFrames) {
+            World world = Bukkit.getWorld(String.valueOf(frameMap.get("world")));
+            if (world == null) {
+                continue;
+            }
+            Object tickValue = frameMap.containsKey("tick") ? frameMap.get("tick") : 0;
+            int tick = Math.max(0, (int) asDouble(tickValue));
+            Location loc = new Location(
+                    world,
+                    asDouble(frameMap.get("x")),
+                    asDouble(frameMap.get("y")),
+                    asDouble(frameMap.get("z")),
+                    (float) asDouble(frameMap.containsKey("yaw") ? frameMap.get("yaw") : 0),
+                    (float) asDouble(frameMap.containsKey("pitch") ? frameMap.get("pitch") : 0));
+            float headYaw = (float) asDouble(frameMap.containsKey("headYaw") ? frameMap.get("headYaw") : loc.getYaw());
+            String pose = String.valueOf(frameMap.containsKey("pose") ? frameMap.get("pose") : "STANDING");
+            frames.add(new ActorFrame(tick, loc, headYaw, pose));
+        }
+        return frames;
+    }
+
+    private void writeActorRecordings(YamlConfiguration config, Cinematic cinematic) {
+        config.set("actors", null);
+        for (SceneActor actor : cinematic.getActors().values()) {
+            String actorPath = "actors." + actor.id();
+            List<Map<String, Object>> frameList = new ArrayList<>();
+            for (ActorFrame frame : actor.frames()) {
+                Location frameLoc = frame.location();
+                if (frameLoc == null || frameLoc.getWorld() == null) {
+                    continue;
+                }
+                Map<String, Object> serialized = new LinkedHashMap<>();
+                serialized.put("tick", frame.tick());
+                serialized.put("world", frameLoc.getWorld().getName());
+                serialized.put("x", frameLoc.getX());
+                serialized.put("y", frameLoc.getY());
+                serialized.put("z", frameLoc.getZ());
+                serialized.put("yaw", frameLoc.getYaw());
+                serialized.put("pitch", frameLoc.getPitch());
+                serialized.put("headYaw", frame.headYaw());
+                serialized.put("pose", frame.pose());
+                frameList.add(serialized);
+            }
+            config.set(actorPath + ".frames", frameList);
+        }
     }
 
     private Map<Integer, List<String>> parseTickCommands(ConfigurationSection section) {
