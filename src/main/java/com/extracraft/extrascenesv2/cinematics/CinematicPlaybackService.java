@@ -143,6 +143,15 @@ public final class CinematicPlaybackService {
         return line == 2 ? subtitleLine2.getOrDefault(playerId, "") : subtitleLine1.getOrDefault(playerId, "");
     }
 
+    public void syncSubtitleForTick(Player player, Cinematic cinematic, int tick) {
+        if (player == null || cinematic == null) {
+            return;
+        }
+        CinematicSubtitleCue cue = cinematic.getSubtitleAtTick(Math.max(0, tick));
+        subtitleLine1.put(player.getUniqueId(), cue == null ? "" : cue.line1());
+        subtitleLine2.put(player.getUniqueId(), cue == null ? "" : cue.line2());
+    }
+
     public boolean stop(Player player) {
         PlaybackState state = states.remove(player.getUniqueId());
         if (state == null) {
@@ -198,7 +207,8 @@ public final class CinematicPlaybackService {
         }
 
         cancelSeekTransition(state);
-        int transitionSteps = Math.max(1, Math.min(8, Math.abs(clampedTick - fromTick) / 8));
+        int distance = Math.abs(clampedTick - fromTick);
+        int transitionSteps = Math.max(3, Math.min(40, Math.max(1, distance / 2)));
         startSeekTransition(player, state, fromTick, clampedTick, transitionSteps);
 
         if (state.running) {
