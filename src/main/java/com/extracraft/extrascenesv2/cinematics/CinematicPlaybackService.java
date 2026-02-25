@@ -156,6 +156,45 @@ public final class CinematicPlaybackService {
         return true;
     }
 
+    public boolean pause(Player player) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null || !state.running) {
+            return false;
+        }
+        cancelTask(state);
+        state.running = false;
+        stopAudio(player, state);
+        return true;
+    }
+
+    public boolean resume(Player player) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null || state.running) {
+            return false;
+        }
+        startRunning(player, state);
+        actorPlaybackService.start(player, state.cinematic, state.currentTick);
+        startAudio(player, state);
+        return true;
+    }
+
+    public boolean seek(Player player, int targetTick) {
+        PlaybackState state = states.get(player.getUniqueId());
+        if (state == null) {
+            return false;
+        }
+
+        int clampedTick = Math.max(0, Math.min(targetTick, state.endTick));
+        state.currentTick = clampedTick;
+        renderAtTick(player, state, clampedTick, false);
+
+        if (state.running) {
+            stopAudio(player, state);
+            startAudio(player, state);
+        }
+        return true;
+    }
+
     public void stopAll() {
         for (UUID playerId : states.keySet().toArray(UUID[]::new)) {
             PlaybackState state = states.remove(playerId);
@@ -259,21 +298,27 @@ public final class CinematicPlaybackService {
                 return;
             }
 
-            Location destination = interpolateLocation(state.cinematic, state.currentTick);
-            if (destination == null || destination.getWorld() == null) {
-                stop(player);
-                return;
-            }
-
-            player.teleport(destination);
-            runTickCommands(player, state);
-            actorPlaybackService.tick(player, state.cinematic, state.currentTick);
-            updateSubtitles(player, state);
+            renderAtTick(player, state, state.currentTick, true);
             state.currentTick++;
         } catch (Exception ex) {
             plugin.getLogger().severe("Scene error for " + player.getName() + ": " + ex.getMessage());
             stop(player);
         }
+    }
+
+    private void renderAtTick(Player player, PlaybackState state, int tick, boolean executeTickCommands) {
+        Location destination = interpolateLocation(state.cinematic, tick);
+        if (destination == null || destination.getWorld() == null) {
+            stop(player);
+            return;
+        }
+
+        player.teleport(destination);
+        if (executeTickCommands) {
+            runTickCommands(player, state);
+        }
+        actorPlaybackService.tick(player, state.cinematic, tick);
+        updateSubtitles(player, state);
     }
 
     private void runTickCommands(Player player, PlaybackState state) {

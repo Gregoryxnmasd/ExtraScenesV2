@@ -3,8 +3,10 @@ package com.extracraft.extrascenesv2;
 import com.extracraft.extrascenesv2.cinematics.CinematicManager;
 import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import com.extracraft.extrascenesv2.commands.ExtraScenesCommand;
+import com.extracraft.extrascenesv2.editor.TimelineEditorService;
 import com.extracraft.extrascenesv2.listeners.ActorRecordingListener;
 import com.extracraft.extrascenesv2.listeners.CinematicProtectionListener;
+import com.extracraft.extrascenesv2.listeners.TimelineEditorListener;
 import com.extracraft.extrascenesv2.placeholders.ExtraCraftSubtitleExpansion;
 import com.extracraft.extrascenesv2.placeholders.ScenesPlaceholderExpansion;
 import org.bukkit.command.PluginCommand;
@@ -14,6 +16,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
 
     private CinematicManager cinematicManager;
     private CinematicPlaybackService playbackService;
+    private TimelineEditorService timelineEditorService;
     private org.bukkit.scheduler.BukkitTask autosaveTask;
 
     @Override
@@ -30,11 +33,13 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
         this.cinematicManager.load();
 
         this.playbackService = new CinematicPlaybackService(this);
+        this.timelineEditorService = new TimelineEditorService(cinematicManager, playbackService);
 
         registerCommands();
         new ScenesPlaceholderExpansion(this).register();
         new ExtraCraftSubtitleExpansion(this).register();
         getServer().getPluginManager().registerEvents(new CinematicProtectionListener(playbackService), this);
+        getServer().getPluginManager().registerEvents(new TimelineEditorListener(timelineEditorService), this);
 
         this.autosaveTask = getServer().getScheduler().runTaskTimer(this, () -> {
             if (cinematicManager != null) {
@@ -74,7 +79,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
             return;
         }
 
-        ExtraScenesCommand executor = new ExtraScenesCommand(this, cinematicManager, playbackService);
+        ExtraScenesCommand executor = new ExtraScenesCommand(this, cinematicManager, playbackService, timelineEditorService);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
         getServer().getPluginManager().registerEvents(new ActorRecordingListener(executor), this);
