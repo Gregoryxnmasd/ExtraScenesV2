@@ -9,6 +9,7 @@ import com.extracraft.extrascenesv2.cinematics.CinematicSubtitleCue;
 import com.extracraft.extrascenesv2.cinematics.SceneActor;
 import com.extracraft.extrascenesv2.cinematics.ActorFrame;
 import com.extracraft.extrascenesv2.cinematics.ActorPlaybackService;
+import com.extracraft.extrascenesv2.editor.TimelineEditorService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -50,7 +51,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final String C_AQUA = "§b";
     private static final String C_DARK_AQUA = "§3";
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "audio", "subtitle", "undo", "redo", "delete", "list", "show", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "audio", "subtitle", "undo", "redo", "delete", "list", "show", "editor", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
     private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
     private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
@@ -64,11 +65,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private final Map<UUID, RecordingState> recordings = new HashMap<>();
     private final Map<UUID, ActorRecordingState> actorRecordings = new HashMap<>();
     private final ActorPlaybackService actorPreviewService;
+    private final TimelineEditorService timelineEditorService;
 
-    public ExtraScenesCommand(JavaPlugin plugin, CinematicManager manager, CinematicPlaybackService playbackService) {
+    public ExtraScenesCommand(JavaPlugin plugin, CinematicManager manager, CinematicPlaybackService playbackService, TimelineEditorService timelineEditorService) {
         this.plugin = plugin;
         this.manager = manager;
         this.playbackService = playbackService;
+        this.timelineEditorService = timelineEditorService;
         this.actorPreviewService = new ActorPlaybackService(plugin);
     }
 
@@ -98,6 +101,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "delete" -> handleDelete(sender, args);
             case "list" -> handleList(sender);
             case "show" -> handleShow(sender, args);
+            case "editor" -> handleEditor(sender, args);
             case "reload" -> {
                 manager.load();
                 sender.sendMessage(C_GREEN + "Scenes reloaded from scene files.");
@@ -736,6 +740,15 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         int startTick;
         if (args.length >= 6 && args[5].equalsIgnoreCase("current")) {
+            if (!playbackService.hasPlaybackState(player.getUniqueId())) {
+                sender.sendMessage(C_RED + "No hay reproducción/editor activo para usar 'current'.");
+                return;
+            }
+            String currentSceneId = playbackService.getCurrentSceneId(player.getUniqueId());
+            if (!currentSceneId.equalsIgnoreCase(args[3])) {
+                sender.sendMessage(C_RED + "'current' solo puede usarse si estás en la misma escena ('" + currentSceneId + "').");
+                return;
+            }
             startTick = playbackService.getCurrentTick(player.getUniqueId());
         } else if (args.length >= 6) {
             try {
@@ -1396,6 +1409,82 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_GRAY + "Players during playback: " + (cinematic.shouldHidePlayersDuringPlayback() ? "hidden" : "visible"));
     }
 
+    private void handleEditor(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(C_RED + "Solo jugadores pueden usar el editor.");
+            return;
+        }
+
+        if (args.length < 2) {
+            player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
+            return;
+        }
+
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "open" -> {
+                if (args.length < 3) {
+                    player.sendMessage(C_RED + "Usage: /scenes editor open <scene> [startTick]");
+                    return;
+                }
+                int startTick = 0;
+                if (args.length >= 4) {
+                    try {
+                        startTick = Math.max(0, Integer.parseInt(args[3]));
+                    } catch (NumberFormatException ex) {
+                        player.sendMessage(C_RED + "startTick inválido.");
+                        return;
+                    }
+                }
+                if (!timelineEditorService.open(player, args[2], startTick)) {
+                    player.sendMessage(C_RED + "No se pudo abrir el editor para esa escena.");
+                }
+            }
+            case "close" -> {
+                if (!timelineEditorService.close(player)) {
+                    player.sendMessage(C_RED + "No tenías un editor abierto.");
+                }
+            }
+            case "play", "pause" -> {
+                if (!timelineEditorService.togglePlayPause(player)) {
+                    player.sendMessage(C_RED + "No hay sesión de editor activa.");
+                }
+            }
+            case "seek" -> {
+                if (args.length < 3) {
+                    player.sendMessage(C_RED + "Usage: /scenes editor seek <deltaTicks>");
+                    return;
+                }
+                int delta;
+                try {
+                    delta = Integer.parseInt(args[2]);
+                } catch (NumberFormatException ex) {
+                    player.sendMessage(C_RED + "deltaTicks inválido.");
+                    return;
+                }
+                if (!timelineEditorService.seek(player, delta)) {
+                    player.sendMessage(C_RED + "No hay sesión de editor activa.");
+                }
+            }
+            case "to" -> {
+                if (args.length < 3) {
+                    player.sendMessage(C_RED + "Usage: /scenes editor to <tick>");
+                    return;
+                }
+                int tick;
+                try {
+                    tick = Math.max(0, Integer.parseInt(args[2]));
+                } catch (NumberFormatException ex) {
+                    player.sendMessage(C_RED + "tick inválido.");
+                    return;
+                }
+                if (!timelineEditorService.seekTo(player, tick)) {
+                    player.sendMessage(C_RED + "No hay sesión de editor activa.");
+                }
+            }
+            default -> player.sendMessage(C_RED + "Usage: /scenes editor <open|close|play|pause|seek|to>");
+        }
+    }
+
     private void sendHelp(CommandSender sender, String label) {
         sender.sendMessage(C_GOLD + "ExtraScenesV2 - commands /" + label + ":");
         sender.sendMessage(C_YELLOW + "/scenes create <scene> <durationTicks>");
@@ -1420,6 +1509,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
         sender.sendMessage(C_YELLOW + "/scenes players <scene> <hide|show>");
         sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
+        sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to>");
         sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
 
@@ -1505,7 +1595,15 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("start", "stop", "clear");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
-            return List.of("create", "skin", "scale", "window", "record");
+            return List.of("create", "skin", "scale", "window", "record", "recordfrom");
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("editor")) {
+            return List.of("open", "close", "play", "pause", "seek", "to");
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("open")) {
+            return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("record")) {
