@@ -869,6 +869,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             }
             state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> actorPreviewService.tick(online, cinematic, state.tick, state.actorId));
+            if (state.tick % 20 == 0) {
+                persistActorRecordingProgress(state);
+            }
             online.sendActionBar(Component.text(C_AQUA + "Recording actor " + state.actorId + C_GRAY + " | Tick " + state.tick + "/" + state.maxTicks));
             state.tick++;
         }, 0L, 1L);
@@ -924,11 +927,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(C_RED + "No estás grabando un actor.");
             return;
         }
-        if (!manager.saveActorFrames(state.sceneId, state.actorId, state.frames)) {
+        if (!persistActorRecordingProgress(state)) {
             player.sendMessage(C_RED + "No se pudo guardar el recording del actor.");
             return;
         }
-        manager.save();
         stopActorRecording(player.getUniqueId());
         player.sendMessage(C_GREEN + "Recording guardado para actor " + state.actorId + ".");
     }
@@ -938,6 +940,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (state == null) {
             return;
         }
+        persistActorRecordingProgress(state);
         stopActorRecordingAudio(state);
         if (state.task != null) {
             state.task.cancel();
@@ -960,6 +963,17 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             }
             actorPreviewService.cleanup(player);
         }
+    }
+
+    private boolean persistActorRecordingProgress(ActorRecordingState state) {
+        if (state == null || state.frames.isEmpty()) {
+            return true;
+        }
+        if (!manager.saveActorFrames(state.sceneId, state.actorId, state.frames)) {
+            return false;
+        }
+        manager.save();
+        return true;
     }
 
     private void giveSaveRecorderItem(Player player) {
