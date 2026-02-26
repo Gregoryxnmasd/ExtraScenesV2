@@ -503,7 +503,7 @@ public final class ActorPlaybackService {
     private byte entityFlagsForPose(String poseName) {
         String normalized = poseName == null ? "STANDING" : poseName.toUpperCase(Locale.ROOT);
         return switch (normalized) {
-            case "CROUCHING", "SNEAKING", "SITTING" -> (byte) 0x02;
+            case "CROUCHING", "SNEAKING" -> (byte) 0x02;
             default -> (byte) 0x00;
         };
     }
