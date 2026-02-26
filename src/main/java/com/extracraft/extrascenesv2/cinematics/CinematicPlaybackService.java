@@ -82,6 +82,7 @@ public final class CinematicPlaybackService {
         startRunning(player, state);
         actorPlaybackService.start(player, state.cinematic, state.currentTick);
         startAudio(player, state);
+        runLifecycleCommands(player, state, state.cinematic.getStartCommands(), state.currentTick);
         return true;
     }
 
@@ -206,6 +207,7 @@ public final class CinematicPlaybackService {
         startRunning(player, state);
         actorPlaybackService.start(player, state.cinematic, state.currentTick);
         startAudio(player, state);
+        runLifecycleCommands(player, state, state.cinematic.getStartCommands(), state.currentTick);
         return true;
     }
 
@@ -385,6 +387,8 @@ public final class CinematicPlaybackService {
             markAsPlayed(player.getUniqueId(), state.cinematic.getId());
         }
 
+        runLifecycleCommands(player, state, state.cinematic.getEndCommands(), state.endTick);
+
         Cinematic.EndAction endAction = state.cinematic.getEndAction();
         if (endAction.type() == Cinematic.EndActionType.RETURN_TO_START) {
             if (state.startLocation != null && state.startLocation.getWorld() != null) {
@@ -398,6 +402,21 @@ public final class CinematicPlaybackService {
         }
 
         stop(player);
+    }
+
+    private void runLifecycleCommands(Player player, PlaybackState state, List<String> commands, int tick) {
+        if (commands == null || commands.isEmpty()) {
+            return;
+        }
+
+        for (String rawCommand : commands) {
+            String command = placeholderResolver.apply(rawCommand, player, state.cinematic, tick);
+            if (command.isBlank()) {
+                continue;
+            }
+            String normalized = command.startsWith("/") ? command.substring(1) : command;
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), normalized);
+        }
     }
 
     private void applySpectatorMode(Player player, PlaybackState state) {
