@@ -2,6 +2,7 @@ package com.extracraft.extrascenesv2.listeners;
 
 import com.extracraft.extrascenesv2.cinematics.CinematicPlaybackService;
 import org.bukkit.entity.Player;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
@@ -13,6 +14,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.Material;
 
 public final class CinematicProtectionListener implements Listener {
 
@@ -54,6 +58,23 @@ public final class CinematicProtectionListener implements Listener {
     @EventHandler
     public void onHotbarSelect(PlayerItemHeldEvent event) {
         if (playbackService.isInCinematic(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onPumpkinUse(PlayerInteractEvent event) {
+        if (!playbackService.isInCinematic(event.getPlayer())) {
+            return;
+        }
+
+        Action action = event.getAction();
+        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+
+        ItemStack item = event.getItem();
+        if (item != null && item.getType() == Material.CARVED_PUMPKIN) {
             event.setCancelled(true);
         }
     }
