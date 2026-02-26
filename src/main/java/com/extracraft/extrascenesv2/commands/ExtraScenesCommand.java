@@ -161,6 +161,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
         sender.sendMessage(C_YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(C_YELLOW + "- /scenes key list " + scene.getId() + " [page]");
+        sender.sendMessage(C_YELLOW + "- /scenes key select " + scene.getId() + " <tick>");
         sender.sendMessage(C_YELLOW + "- /scenes finish " + scene.getId() + " <return|stay|teleport_here|teleport>");
         sender.sendMessage(C_YELLOW + "- /scenes players " + scene.getId() + " <hide|show>");
         sender.sendMessage(C_YELLOW + "- /scenes tickcmd add " + scene.getId() + " <tick> <command>");
@@ -996,7 +997,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKey(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
+            sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|select|clear>");
             return;
         }
 
@@ -1006,8 +1007,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "mode" -> handleKeyMode(sender, args);
             case "del" -> handleKeyDel(sender, args);
             case "list" -> handleKeyList(sender, args);
+            case "select" -> handleKeySelect(sender, args);
             case "clear" -> handleKeyClear(sender, args);
-            default -> sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|clear>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes key <add|set|mode|del|list|select|clear>");
         }
     }
 
@@ -1201,6 +1203,44 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         manager.save();
         sender.sendMessage(C_GREEN + "All keyframes were removed.");
+    }
+
+    private void handleKeySelect(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(C_RED + "Only players can use this command.");
+            return;
+        }
+
+        if (args.length < 4) {
+            sender.sendMessage(C_RED + "Usage: /scenes key select <scene> <tick>");
+            return;
+        }
+
+        int tick;
+        try {
+            tick = Math.max(0, Integer.parseInt(args[3]));
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(C_RED + "Invalid tick.");
+            return;
+        }
+
+        Cinematic cinematic = manager.getCinematic(args[2]).orElse(null);
+        if (cinematic == null) {
+            sender.sendMessage(C_RED + "That scene does not exist.");
+            return;
+        }
+
+        CinematicPoint point = cinematic.getPoints().stream()
+                .filter(candidate -> candidate.tick() == tick)
+                .findFirst()
+                .orElse(null);
+        if (point == null) {
+            sender.sendMessage(C_RED + "There is no keyframe at tick " + tick + " in that scene.");
+            return;
+        }
+
+        player.teleport(point.location());
+        sender.sendMessage(C_GREEN + "Teleported to keyframe tick " + tick + " of scene '" + cinematic.getId() + "'.");
     }
 
 
@@ -1573,6 +1613,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
         sender.sendMessage(C_YELLOW + "/scenes key del <scene> <tick>");
         sender.sendMessage(C_YELLOW + "/scenes key list <scene> [page]");
+        sender.sendMessage(C_YELLOW + "/scenes key select <scene> <tick>");
         sender.sendMessage(C_YELLOW + "/scenes key clear <scene> confirm");
         sender.sendMessage(C_YELLOW + "/scenes finish <scene> <return|stay|teleport_here|teleport>");
         sender.sendMessage(C_YELLOW + "/scenes players <scene> <hide|show>");
@@ -1771,11 +1812,22 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("key")) {
-            return List.of("add", "set", "mode", "del", "list", "clear");
+            return List.of("add", "set", "mode", "del", "list", "select", "clear");
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("key")) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
+        }
+
+        if (args.length == 4 && args[0].equalsIgnoreCase("key")
+            && List.of("add", "set", "mode", "del", "select").contains(args[1].toLowerCase(Locale.ROOT))) {
+            return manager.getCinematic(args[2])
+                    .map(cinematic -> cinematic.getPoints().stream()
+                            .map(point -> String.valueOf(point.tick()))
+                            .distinct()
+                            .filter(tick -> tick.startsWith(args[3]))
+                            .toList())
+                    .orElse(Collections.emptyList());
         }
 
         if (args.length == 5 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("add")) {
