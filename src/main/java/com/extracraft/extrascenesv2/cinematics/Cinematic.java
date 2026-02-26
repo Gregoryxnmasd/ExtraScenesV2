@@ -13,6 +13,8 @@ public final class Cinematic {
     private final int durationTicks;
     private final List<CinematicPoint> points;
     private final EndAction endAction;
+    private final List<String> startCommands;
+    private final List<String> endCommands;
     private final Map<Integer, List<String>> tickCommands;
     private final Map<String, SceneActor> actors;
     private final boolean hidePlayersDuringPlayback;
@@ -36,10 +38,30 @@ public final class Cinematic {
                      Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors,
                      boolean hidePlayersDuringPlayback, CinematicAudioTrack audioTrack,
                      List<CinematicSubtitleCue> subtitleCues) {
+        this(id, durationTicks, points, endAction, List.of(), List.of(), tickCommands, actors,
+                hidePlayersDuringPlayback, audioTrack, subtitleCues);
+    }
+
+    public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
+                     Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors,
+                     boolean hidePlayersDuringPlayback, CinematicAudioTrack audioTrack,
+                     List<String> startCommands, List<String> endCommands,
+                     List<CinematicSubtitleCue> subtitleCues) {
+        this(id, durationTicks, points, endAction, startCommands, endCommands, tickCommands, actors,
+                hidePlayersDuringPlayback, audioTrack, subtitleCues);
+    }
+
+    public Cinematic(String id, int durationTicks, List<CinematicPoint> points, EndAction endAction,
+                     List<String> startCommands, List<String> endCommands,
+                     Map<Integer, List<String>> tickCommands, Map<String, SceneActor> actors,
+                     boolean hidePlayersDuringPlayback, CinematicAudioTrack audioTrack,
+                     List<CinematicSubtitleCue> subtitleCues) {
         this.id = id;
         this.durationTicks = Math.max(1, durationTicks);
         this.points = new ArrayList<>(points);
         this.endAction = endAction == null ? EndAction.stayAtLastCameraPoint() : endAction;
+        this.startCommands = sanitizeCommands(startCommands);
+        this.endCommands = sanitizeCommands(endCommands);
         this.tickCommands = deepCopyTickCommands(tickCommands);
         this.actors = deepCopyActors(actors);
         this.hidePlayersDuringPlayback = hidePlayersDuringPlayback;
@@ -71,6 +93,14 @@ public final class Cinematic {
 
     public Map<Integer, List<String>> getTickCommands() {
         return tickCommands;
+    }
+
+    public List<String> getStartCommands() {
+        return startCommands;
+    }
+
+    public List<String> getEndCommands() {
+        return endCommands;
     }
 
     public Map<String, SceneActor> getActors() {
@@ -112,6 +142,17 @@ public final class Cinematic {
             copy.put(entry.getKey().toLowerCase(java.util.Locale.ROOT), entry.getValue());
         }
         return Collections.unmodifiableMap(copy);
+    }
+
+    private List<String> sanitizeCommands(List<String> source) {
+        if (source == null || source.isEmpty()) {
+            return List.of();
+        }
+
+        return source.stream()
+                .filter(command -> command != null && !command.isBlank())
+                .map(String::trim)
+                .toList();
     }
 
     private Map<Integer, List<String>> deepCopyTickCommands(Map<Integer, List<String>> source) {
