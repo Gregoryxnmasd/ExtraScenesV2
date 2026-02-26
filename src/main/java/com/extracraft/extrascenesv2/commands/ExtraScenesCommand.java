@@ -1858,6 +1858,23 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("add", "remove", "list", "clear");
         }
 
+        if (args.length == 2 && args[0].equalsIgnoreCase("subtitle")) {
+            return List.of("add", "del", "clear");
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("subtitle")) {
+            return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
+        }
+
+        if (args.length == 4 && args[0].equalsIgnoreCase("subtitle") && args[1].equalsIgnoreCase("del")) {
+            return manager.getCinematic(args[2])
+                    .map(cinematic -> cinematic.getSubtitleCues().stream()
+                            .map(subtitle -> String.valueOf(subtitle.startTick()))
+                            .filter(startTick -> startTick.startsWith(args[3]))
+                            .toList())
+                    .orElse(Collections.emptyList());
+        }
+
         if (args.length == 3 && args[0].equalsIgnoreCase("tickcmd")) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
