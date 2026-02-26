@@ -142,14 +142,14 @@ public final class ActorPlaybackService {
         try {
             int entityId = nextEntityId();
             UUID profileId = UUID.randomUUID();
-            String profileName = sanitizeProfileName(actor.displayName(), actor.id());
+            String profileName = generateHiddenProfileName(profileId);
             Location initial = initialFrame.location();
             VirtualActor virtualActor = new VirtualActor(entityId, profileId, profileName, initial.clone(), actor.scale(), initialFrame.headYaw(), initialFrame.pose());
 
             WrappedGameProfile profile = new WrappedGameProfile(profileId, profileName);
             applySkinProperties(viewer, actor, profile);
 
-            if (!sendAddPlayerInfo(viewer, profileId, profile, actor.displayName())) {
+            if (!sendAddPlayerInfo(viewer, profileId, profile, "")) {
                 return null;
             }
 
@@ -503,7 +503,7 @@ public final class ActorPlaybackService {
     private byte entityFlagsForPose(String poseName) {
         String normalized = poseName == null ? "STANDING" : poseName.toUpperCase(Locale.ROOT);
         return switch (normalized) {
-            case "CROUCHING", "SNEAKING", "SITTING" -> (byte) 0x02;
+            case "CROUCHING", "SNEAKING" -> (byte) 0x02;
             default -> (byte) 0x00;
         };
     }
@@ -529,13 +529,9 @@ public final class ActorPlaybackService {
         return a != null && b != null && a.getWorld() != null && a.getWorld().equals(b.getWorld());
     }
 
-    private String sanitizeProfileName(String displayName, String fallbackId) {
-        String base = (displayName == null || displayName.isBlank()) ? fallbackId : displayName;
-        String stripped = base.replaceAll("[^A-Za-z0-9_]", "");
-        if (stripped.isBlank()) {
-            stripped = "SceneActor";
-        }
-        return stripped.length() <= 16 ? stripped : stripped.substring(0, 16);
+    private String generateHiddenProfileName(UUID profileId) {
+        String compact = profileId.toString().replace("-", "");
+        return "es" + compact.substring(0, 14);
     }
 
     private byte angleToByte(float angle) {
