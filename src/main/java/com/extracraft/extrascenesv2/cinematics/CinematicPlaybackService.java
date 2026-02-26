@@ -533,7 +533,8 @@ public final class CinematicPlaybackService {
         if (track == null || !track.isConfigured()) {
             return;
         }
-        int seekMillis = Math.max(0, track.startAtMillis() + (state.currentTick * 50));
+        int playbackTick = Math.max(0, state.currentTick + 1);
+        int seekMillis = Math.max(0, track.startAtMillis() + (playbackTick * 50));
         String payload = track.renderPlayCommand(player.getName(), seekMillis);
         openAudioCommandService.dispatch(payload, "playback-start scene=" + state.cinematic.getId() + " player=" + player.getName());
     }
