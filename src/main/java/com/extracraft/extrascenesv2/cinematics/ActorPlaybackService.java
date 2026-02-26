@@ -312,7 +312,7 @@ public final class ActorPlaybackService {
 
         List<WrappedDataValue> dataValues = new ArrayList<>();
         // Keep actors visible and do not force a floating name tag above their head.
-        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x00));
+        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), entityFlagsForPose(pose)));
         dataValues.add(new WrappedDataValue(3, WrappedDataWatcher.Registry.get(Boolean.class), false));
         // Enable all player skin model layers (hat, jacket, sleeves, pants, cape).
         dataValues.add(new WrappedDataValue(17, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x7F));
@@ -455,6 +455,7 @@ public final class ActorPlaybackService {
         PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
         metadata.getIntegers().write(0, entityId);
         List<WrappedDataValue> dataValues = new ArrayList<>();
+        dataValues.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), entityFlagsForPose(pose)));
         appendPoseDataValue(dataValues, pose);
         if (dataValues.isEmpty()) {
             return;
@@ -496,6 +497,14 @@ public final class ActorPlaybackService {
                 yield findEntityPose("SNEAKING");
             }
             default -> findEntityPose("STANDING");
+        };
+    }
+
+    private byte entityFlagsForPose(String poseName) {
+        String normalized = poseName == null ? "STANDING" : poseName.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "CROUCHING", "SNEAKING", "SITTING" -> (byte) 0x02;
+            default -> (byte) 0x00;
         };
     }
 
