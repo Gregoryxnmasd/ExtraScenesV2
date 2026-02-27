@@ -170,9 +170,17 @@ public final class CinematicPlaybackService {
     }
 
     public boolean stop(Player player) {
+        return stop(player, false);
+    }
+
+    public boolean stop(Player player, boolean runEndCommands) {
         PlaybackState state = states.remove(player.getUniqueId());
         if (state == null) {
             return false;
+        }
+
+        if (runEndCommands) {
+            runLifecycleCommands(player, state, state.cinematic.getEndCommands(), Math.max(0, state.currentTick));
         }
 
         cancelSeekTransition(state);
