@@ -6,6 +6,7 @@ public record CinematicPoint(int tick, Location location, InterpolationMode inte
 
     public enum InterpolationMode {
         SMOOTH,
+        LINEAR,
         INSTANT;
 
         public static InterpolationMode fromString(String raw) {
@@ -13,7 +14,13 @@ public record CinematicPoint(int tick, Location location, InterpolationMode inte
                 return SMOOTH;
             }
 
-            return "instant".equalsIgnoreCase(raw) ? INSTANT : SMOOTH;
+            if ("instant".equalsIgnoreCase(raw)) {
+                return INSTANT;
+            }
+            if ("linear".equalsIgnoreCase(raw)) {
+                return LINEAR;
+            }
+            return SMOOTH;
         }
     }
 
