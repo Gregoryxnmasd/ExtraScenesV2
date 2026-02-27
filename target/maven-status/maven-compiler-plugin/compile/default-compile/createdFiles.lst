@@ -1,9 +1,14 @@
 com\extracraft\extrascenesv2\cinematics\Cinematic$EndAction.class
+com\extracraft\extrascenesv2\listeners\TimelineEditorListener.class
+com\extracraft\extrascenesv2\placeholders\ExtraCraftSubtitleExpansion.class
 com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService$PlaybackState.class
+com\extracraft\extrascenesv2\cinematics\CinematicSubtitleCue.class
 com\extracraft\extrascenesv2\cinematics\Cinematic$EndActionType.class
 com\extrascenesv2\ExtraScenesPlugin.class
 com\extracraft\extrascenesv2\commands\ExtraScenesCommand$RecordingState.class
+com\extracraft\extrascenesv2\audio\OpenAudioCommandService.class
 com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService.class
+com\extracraft\extrascenesv2\commands\audio\AudioCommandHandler.class
 com\extrascenesv2\SceneCommandExecutor.class
 com\extracraft\extrascenesv2\cinematics\ActorPlaybackService$VirtualActor.class
 com\extracraft\extrascenesv2\cinematics\ActorPlaybackService.class
@@ -19,6 +24,9 @@ com\extracraft\extrascenesv2\commands\ExtraScenesCommand$SkinData.class
 com\extracraft\extrascenesv2\placeholders\ScenesPlaceholderExpansion.class
 com\extracraft\extrascenesv2\listeners\CinematicProtectionListener.class
 com\extracraft\extrascenesv2\cinematics\ActorFrame.class
+com\extracraft\extrascenesv2\editor\TimelineEditorService.class
 com\extracraft\extrascenesv2\ExtraScenesV2Plugin.class
 com\extracraft\extrascenesv2\cinematics\CinematicPoint.class
+com\extracraft\extrascenesv2\cinematics\CinematicAudioTrack.class
+com\extracraft\extrascenesv2\editor\TimelineEditorService$EditorSession.class
 com\extracraft\extrascenesv2\commands\ExtraScenesCommand$ActorRecordingState.class

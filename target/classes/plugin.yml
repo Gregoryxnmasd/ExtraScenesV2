@@ -6,11 +6,11 @@ author: ExtraCraft
 website: https://extracraft.com
 folia-supported: true
 depend: [PlaceholderAPI]
-softdepend: [ProtocolLib]
+softdepend: [ProtocolLib, OpenAudioMc, OpenAudioMC]
 commands:
   extrascenes:
     description: Scene system
-    usage: /extrascenes <create|edit|play|stop|record|actor|key|tickcmd|placeholders|delete|list|show|reload>
+    usage: /extrascenes <create|edit|play|stop|record|actor|key|tickcmd|audio|subtitle|undo|redo|placeholders|delete|list|show|reload>
     aliases: [scenes]
     permission: extrascenes.use
 permissions:
