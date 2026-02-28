@@ -156,9 +156,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         sender.sendMessage(C_GOLD + "Edit wizard for '" + scene.getId() + "':");
-        sender.sendMessage(C_YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|instant]");
-        sender.sendMessage(C_YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|instant]");
-        sender.sendMessage(C_YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|instant>");
+        sender.sendMessage(C_YELLOW + "- /scenes key add " + scene.getId() + " <tick> here [smooth|linear|instant]");
+        sender.sendMessage(C_YELLOW + "- /scenes key set " + scene.getId() + " <tick> x y z yaw pitch [smooth|linear|instant]");
+        sender.sendMessage(C_YELLOW + "- /scenes key mode " + scene.getId() + " <tick> <smooth|linear|instant>");
         sender.sendMessage(C_YELLOW + "- /scenes key del " + scene.getId() + " <tick>");
         sender.sendMessage(C_YELLOW + "- /scenes key list " + scene.getId() + " [page]");
         sender.sendMessage(C_YELLOW + "- /scenes key select " + scene.getId() + " <tick>");
@@ -1030,7 +1030,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 5 || !"here".equalsIgnoreCase(args[4])) {
-            sender.sendMessage(C_RED + "Usage: /scenes key add <scene> <tick> here [smooth|instant]");
+            sender.sendMessage(C_RED + "Usage: /scenes key add <scene> <tick> here [smooth|linear|instant]");
             return;
         }
 
@@ -1044,7 +1044,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 6 ? args[5] : null);
         if (interpolationMode == null) {
-            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth, linear o instant.");
             return;
         }
 
@@ -1059,7 +1059,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKeySet(CommandSender sender, String[] args) {
         if (args.length < 9) {
-            sender.sendMessage(C_RED + "Usage: /scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
+            sender.sendMessage(C_RED + "Usage: /scenes key set <scene> <tick> x y z yaw pitch [smooth|linear|instant]");
             return;
         }
 
@@ -1089,7 +1089,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args.length >= 10 ? args[9] : null);
         if (interpolationMode == null) {
-            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth, linear o instant.");
             return;
         }
 
@@ -1128,7 +1128,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleKeyMode(CommandSender sender, String[] args) {
         if (args.length < 5) {
-            sender.sendMessage(C_RED + "Usage: /scenes key mode <scene> <tick> <smooth|instant>");
+            sender.sendMessage(C_RED + "Usage: /scenes key mode <scene> <tick> <smooth|linear|instant>");
             return;
         }
 
@@ -1142,7 +1142,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         CinematicPoint.InterpolationMode interpolationMode = parseInterpolationMode(args[4]);
         if (interpolationMode == null) {
-            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth or instant.");
+            sender.sendMessage(C_RED + "Invalid interpolation. Use smooth, linear o instant.");
             return;
         }
 
@@ -1618,9 +1618,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes actor record start <scene> <actorId> [duration]");
         sender.sendMessage(C_YELLOW + "/scenes actor record stop");
         sender.sendMessage(C_YELLOW + "/scenes actor recordfrom <scene> <actorId> <startTick|current> [duration]");
-        sender.sendMessage(C_YELLOW + "/scenes key add <scene> <tick> here [smooth|instant]");
-        sender.sendMessage(C_YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|instant]");
-        sender.sendMessage(C_YELLOW + "/scenes key mode <scene> <tick> <smooth|instant>");
+        sender.sendMessage(C_YELLOW + "/scenes key add <scene> <tick> here [smooth|linear|instant]");
+        sender.sendMessage(C_YELLOW + "/scenes key set <scene> <tick> x y z yaw pitch [smooth|linear|instant]");
+        sender.sendMessage(C_YELLOW + "/scenes key mode <scene> <tick> <smooth|linear|instant>");
         sender.sendMessage(C_YELLOW + "/scenes key del <scene> <tick>");
         sender.sendMessage(C_YELLOW + "/scenes key list <scene> [page]");
         sender.sendMessage(C_YELLOW + "/scenes key select <scene> <tick>");
@@ -1667,6 +1667,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if ("smooth".equalsIgnoreCase(raw)) {
             return CinematicPoint.InterpolationMode.SMOOTH;
+        }
+
+        if ("linear".equalsIgnoreCase(raw)) {
+            return CinematicPoint.InterpolationMode.LINEAR;
         }
 
         if ("instant".equalsIgnoreCase(raw)) {
@@ -1852,15 +1856,15 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 6 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("add")) {
-            return List.of("smooth", "instant");
+            return List.of("smooth", "linear", "instant");
         }
 
         if (args.length == 10 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("set")) {
-            return List.of("smooth", "instant");
+            return List.of("smooth", "linear", "instant");
         }
 
         if (args.length == 5 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("mode")) {
-            return List.of("smooth", "instant");
+            return List.of("smooth", "linear", "instant");
         }
 
         if (args.length == 4 && args[0].equalsIgnoreCase("key") && args[1].equalsIgnoreCase("clear")) {

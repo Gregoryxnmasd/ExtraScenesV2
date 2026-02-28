@@ -481,6 +481,17 @@ public final class CinematicPlaybackService {
         Location prevLocation = prev.location();
         Location nextLocation = next.location();
         double rawT = (tick - prev.tick()) / (double) (next.tick() - prev.tick());
+
+        if (next.interpolationMode() == CinematicPoint.InterpolationMode.LINEAR) {
+            double linearT = Math.max(0.0, Math.min(1.0, rawT));
+            double x = lerp(prevLocation.getX(), nextLocation.getX(), linearT);
+            double y = lerp(prevLocation.getY(), nextLocation.getY(), linearT);
+            double z = lerp(prevLocation.getZ(), nextLocation.getZ(), linearT);
+            float yaw = (float) lerpAngle(prevLocation.getYaw(), nextLocation.getYaw(), linearT);
+            float pitch = (float) lerp(prevLocation.getPitch(), nextLocation.getPitch(), linearT);
+            return new Location(prevLocation.getWorld(), x, y, z, yaw, pitch);
+        }
+
         double smoothT = smootherStep(rawT);
 
         Location beforeLocation = nextIndex - 2 >= 0 ? points.get(nextIndex - 2).location() : prevLocation;
