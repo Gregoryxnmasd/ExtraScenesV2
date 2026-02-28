@@ -855,6 +855,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        state.recordingStartNanos = System.nanoTime() - (state.tick * 50_000_000L);
+        state.lastRecordedTick = state.tick - 1;
         startActorRecordingAudio(player, state);
 
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
@@ -863,11 +865,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 stopActorRecording(player.getUniqueId());
                 return;
             }
-            if (state.tick > state.maxTicks) {
+
+            int targetTick = state.computeTickFromRealtime();
+            if (targetTick > state.maxTicks) {
                 saveActorRecording(online);
                 return;
             }
-            state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), resolveActorPoseForRecording(online)));
+
+            state.appendMissingFrames(online, targetTick);
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
                 actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
                 playbackService.syncSubtitleForTick(online, cinematic, state.tick);
@@ -880,7 +885,10 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             }
 
             online.sendActionBar(Component.text(buildRecordingActionBar(state)));
-            state.tick++;
+
+            if (state.tick >= state.maxTicks) {
+                saveActorRecording(online);
+            }
         }, 0L, 1L);
     }
 
@@ -897,15 +905,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         player.sendActionBar(Component.text(C_AQUA + line1 + (line2.isBlank() ? "" : C_GRAY + " | " + C_AQUA + line2)));
     }
 
-    private String resolveActorPoseForRecording(Player player) {
-        if (player == null) {
-            return "STANDING";
-        }
-        if (player.isInsideVehicle()) {
-            return "SITTING";
-        }
-        return player.getPose().name();
-    }
 
     private void startActorRecordingAudio(Player player, ActorRecordingState state) {
         Cinematic cinematic = manager.getCinematic(state.sceneId).orElse(null);
@@ -1929,12 +1928,36 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         private BukkitTask countdownTaskTwo;
         private String audioStopCommand;
         private boolean audioPlaying;
+        private long recordingStartNanos;
+        private int lastRecordedTick;
 
         private ActorRecordingState(String sceneId, String actorId, int maxTicks, int startTick) {
             this.sceneId = sceneId;
             this.actorId = actorId;
             this.maxTicks = Math.max(startTick, Math.max(1, maxTicks));
             this.tick = Math.max(0, startTick);
+        }
+
+        private int computeTickFromRealtime() {
+            long elapsedNanos = Math.max(0L, System.nanoTime() - recordingStartNanos);
+            long elapsedTicks = elapsedNanos / 50_000_000L;
+            return (int) Math.min(Integer.MAX_VALUE, elapsedTicks);
+        }
+
+        private void appendMissingFrames(Player player, int targetTick) {
+            if (targetTick <= lastRecordedTick) {
+                tick = Math.max(0, targetTick);
+                return;
+            }
+
+            Location location = player.getLocation();
+            float headYaw = player.getEyeLocation().getYaw();
+            String pose = player.isInsideVehicle() ? "SITTING" : player.getPose().name();
+            for (int frameTick = lastRecordedTick + 1; frameTick <= targetTick; frameTick++) {
+                frames.add(new ActorFrame(frameTick, location.clone(), headYaw, pose));
+            }
+            lastRecordedTick = targetTick;
+            tick = targetTick;
         }
     }
 
