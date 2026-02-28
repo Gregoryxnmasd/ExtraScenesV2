@@ -139,18 +139,17 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             previousTask.cancel();
         }
 
-        long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
-        long worldTime = Math.floorMod(target.getWorld().getTime(), 24000L);
-        long totalDelta = Math.floorMod(worldTime - playerTime, 24000L);
+        final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
+        final int totalSteps = 400;
+        final long predictedWorldTimeAtEnd = Math.floorMod(target.getWorld().getTime() + totalSteps, 24000L);
+        final long totalDelta = Math.floorMod(predictedWorldTimeAtEnd - playerTime, 24000L);
 
         if (totalDelta == 0L) {
             target.resetPlayerTime();
-            sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo. Se restauró player time normal.");
+            sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
             return;
         }
 
-        final int totalSteps = 120;
-        final double stepDelta = totalDelta / (double) totalSteps;
         final UUID targetId = target.getUniqueId();
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
@@ -174,17 +173,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     if (activeTask != null) {
                         activeTask.cancel();
                     }
-                    online.sendMessage(C_AQUA + "Tu tiempo volvió a sincronizarse con el mundo.");
                     return;
                 }
 
-                long nextTime = Math.floorMod(Math.round(playerTime + (stepDelta * step)), 24000L);
+                double progress = step / (double) totalSteps;
+                double easedProgress = progress * progress * (3.0D - (2.0D * progress));
+                long nextTime = Math.floorMod(Math.round(playerTime + (totalDelta * easedProgress)), 24000L);
                 online.setPlayerTime(nextTime, false);
             }
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo para " + target.getName() + " hasta sincronizar con el mundo.");
+        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo super smooth para " + target.getName() + ".");
     }
 
     private void handleCreate(CommandSender sender, String[] args) {
