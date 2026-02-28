@@ -141,20 +141,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
         final long worldTime = Math.floorMod(target.getWorld().getTime(), 24000L);
-        final long initialOffset = shortestTimeDelta(worldTime, playerTime);
+        final long initialDelta = shortestTimeDelta(playerTime, worldTime);
 
-        if (Math.abs(initialOffset) <= 1L) {
+        if (Math.abs(initialDelta) <= 1L) {
             target.resetPlayerTime();
             sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
             return;
         }
 
         final UUID targetId = target.getUniqueId();
-        final int durationTicks = 200;
+        final long maxStepPerTick = 5L;
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-            private int step;
-
             @Override
             public void run() {
                 Player online = Bukkit.getPlayer(targetId);
@@ -166,12 +164,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                step++;
-                double progress = Math.min(1.0D, step / (double) durationTicks);
-                double eased = easeInOutSine(progress);
-                long offset = Math.round(initialOffset * (1.0D - eased));
+                long livePlayerTime = Math.floorMod(online.getPlayerTime(), 24000L);
+                long liveWorldTime = Math.floorMod(online.getWorld().getTime(), 24000L);
+                long delta = shortestTimeDelta(livePlayerTime, liveWorldTime);
 
-                if (Math.abs(offset) <= 1L || progress >= 1.0D) {
+                if (Math.abs(delta) <= 1L) {
                     online.resetPlayerTime();
                     BukkitTask activeTask = playerTimeGradients.remove(targetId);
                     if (activeTask != null) {
@@ -180,16 +177,18 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                online.setPlayerTime(offset, true);
+                long adjustment = Math.min(maxStepPerTick, Math.abs(delta));
+                if (delta < 0L) {
+                    adjustment = -adjustment;
+                }
+
+                long nextTime = Math.floorMod(livePlayerTime + adjustment, 24000L);
+                online.setPlayerTime(nextTime, false);
             }
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando sincronización tipo timelapse suave para " + target.getName() + ".");
-    }
-
-    private static double easeInOutSine(double progress) {
-        return 0.5D - 0.5D * Math.cos(Math.PI * progress);
+        sender.sendMessage(C_GREEN + "Aplicando sincronización timelapse ultra suave para " + target.getName() + " (ajustes cada tick).");
     }
 
     private static long shortestTimeDelta(long fromTime, long toTime) {
