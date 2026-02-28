@@ -53,7 +53,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final String C_AQUA = "§b";
     private static final String C_DARK_AQUA = "§3";
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "audio", "subtitle", "undo", "redo", "delete", "list", "show", "editor", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("create", "edit", "play", "stop", "record", "actor", "key", "tickcmd", "placeholders", "finish", "players", "audio", "subtitle", "undo", "redo", "delete", "list", "show", "editor", "time", "reload");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
     private static final Pattern UUID_ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"([a-fA-F0-9]{32})\"");
     private static final Pattern TEXTURE_PATTERN = Pattern.compile("\"value\"\\s*:\\s*\"([^\"]+)\"");
@@ -66,6 +66,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private final CinematicPlaybackService playbackService;
     private final Map<UUID, RecordingState> recordings = new HashMap<>();
     private final Map<UUID, ActorRecordingState> actorRecordings = new HashMap<>();
+    private final Map<UUID, BukkitTask> playerTimeGradients = new HashMap<>();
     private final ActorPlaybackService actorPreviewService;
     private final TimelineEditorService timelineEditorService;
     private final OpenAudioCommandService openAudioCommandService;
@@ -108,6 +109,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             case "list" -> handleList(sender);
             case "show" -> handleShow(sender, args);
             case "editor" -> handleEditor(sender, args);
+            case "time" -> handleTime(sender, args);
             case "reload" -> {
                 shutdown();
                 playbackService.stopAll();
@@ -118,6 +120,71 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             default -> sendHelp(sender, label);
         }
         return true;
+    }
+
+    private void handleTime(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(C_RED + "Usage: /scenes time <player>");
+            return;
+        }
+
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            sender.sendMessage(C_RED + "Player not found: " + args[1]);
+            return;
+        }
+
+        BukkitTask previousTask = playerTimeGradients.remove(target.getUniqueId());
+        if (previousTask != null) {
+            previousTask.cancel();
+        }
+
+        final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
+        final int totalSteps = 400;
+        final long predictedWorldTimeAtEnd = Math.floorMod(target.getWorld().getTime() + totalSteps, 24000L);
+        final long totalDelta = Math.floorMod(predictedWorldTimeAtEnd - playerTime, 24000L);
+
+        if (totalDelta == 0L) {
+            target.resetPlayerTime();
+            sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
+            return;
+        }
+
+        final UUID targetId = target.getUniqueId();
+
+        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+            private int step = 0;
+
+            @Override
+            public void run() {
+                Player online = Bukkit.getPlayer(targetId);
+                if (online == null || !online.isOnline()) {
+                    BukkitTask activeTask = playerTimeGradients.remove(targetId);
+                    if (activeTask != null) {
+                        activeTask.cancel();
+                    }
+                    return;
+                }
+
+                step++;
+                if (step >= totalSteps) {
+                    online.resetPlayerTime();
+                    BukkitTask activeTask = playerTimeGradients.remove(targetId);
+                    if (activeTask != null) {
+                        activeTask.cancel();
+                    }
+                    return;
+                }
+
+                double progress = step / (double) totalSteps;
+                double easedProgress = progress * progress * (3.0D - (2.0D * progress));
+                long nextTime = Math.floorMod(Math.round(playerTime + (totalDelta * easedProgress)), 24000L);
+                online.setPlayerTime(nextTime, false);
+            }
+        }, 1L, 1L);
+
+        playerTimeGradients.put(targetId, task);
+        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo super smooth para " + target.getName() + ".");
     }
 
     private void handleCreate(CommandSender sender, String[] args) {
@@ -1630,6 +1697,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes tickcmd <add|remove|list|clear> ...");
         sender.sendMessage(C_YELLOW + "/scenes audio <set|clear|playtemplate|stoptemplate|show> ...");
         sender.sendMessage(C_YELLOW + "/scenes editor <open|close|play|pause|seek|to>");
+        sender.sendMessage(C_YELLOW + "/scenes time <player>");
         sender.sendMessage(C_YELLOW + "/scenes placeholders");
     }
 
@@ -1717,6 +1785,16 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         for (UUID playerId : actorRecordings.keySet().toArray(UUID[]::new)) {
             stopActorRecording(playerId);
         }
+        for (UUID playerId : playerTimeGradients.keySet().toArray(UUID[]::new)) {
+            BukkitTask task = playerTimeGradients.remove(playerId);
+            if (task != null) {
+                task.cancel();
+            }
+            Player online = Bukkit.getPlayer(playerId);
+            if (online != null) {
+                online.resetPlayerTime();
+            }
+        }
     }
 
     @Override
@@ -1745,6 +1823,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("editor")) {
             return List.of("open", "close", "play", "pause", "seek", "to");
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("time")) {
+            return Bukkit.getOnlinePlayers().stream()
+                    .map(Player::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("editor") && args[1].equalsIgnoreCase("open")) {
