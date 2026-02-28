@@ -140,20 +140,24 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
-        final int totalSteps = 400;
+        final int totalSteps = 200;
         final long predictedWorldTimeAtEnd = Math.floorMod(target.getWorld().getTime() + totalSteps, 24000L);
-        final long totalDelta = Math.floorMod(predictedWorldTimeAtEnd - playerTime, 24000L);
+        final long forwardDelta = Math.floorMod(predictedWorldTimeAtEnd - playerTime, 24000L);
+        final long backwardDelta = forwardDelta - 24000L;
+        final long signedDelta = Math.abs(backwardDelta) < Math.abs(forwardDelta) ? backwardDelta : forwardDelta;
 
-        if (totalDelta == 0L) {
+        if (signedDelta == 0L) {
             target.resetPlayerTime();
             sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
             return;
         }
 
         final UUID targetId = target.getUniqueId();
+        final double deltaPerStep = signedDelta / (double) totalSteps;
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
             private int step = 0;
+            private double currentTime = playerTime;
 
             @Override
             public void run() {
@@ -176,15 +180,14 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                double progress = step / (double) totalSteps;
-                double easedProgress = progress * progress * (3.0D - (2.0D * progress));
-                long nextTime = Math.floorMod(Math.round(playerTime + (totalDelta * easedProgress)), 24000L);
+                currentTime += deltaPerStep;
+                long nextTime = Math.floorMod(Math.round(currentTime), 24000L);
                 online.setPlayerTime(nextTime, false);
             }
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo super smooth para " + target.getName() + ".");
+        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo suave (10s máx) para " + target.getName() + ".");
     }
 
     private void handleCreate(CommandSender sender, String[] args) {
