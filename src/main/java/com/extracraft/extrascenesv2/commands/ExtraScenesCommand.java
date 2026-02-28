@@ -141,18 +141,20 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
         final long worldTime = Math.floorMod(target.getWorld().getTime(), 24000L);
-        final long initialDelta = shortestTimeDelta(playerTime, worldTime);
+        final long initialOffset = shortestTimeDelta(worldTime, playerTime);
 
-        if (Math.abs(initialDelta) <= 1L) {
+        if (Math.abs(initialOffset) <= 1L) {
             target.resetPlayerTime();
             sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
             return;
         }
 
         final UUID targetId = target.getUniqueId();
-        final long maxStepPerTick = 5L;
+        final int durationTicks = Math.max(20, Math.min(80, (int) (Math.abs(initialOffset) / 120L)));
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+            private int tick;
+
             @Override
             public void run() {
                 Player online = Bukkit.getPlayer(targetId);
@@ -164,11 +166,12 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                long livePlayerTime = Math.floorMod(online.getPlayerTime(), 24000L);
-                long liveWorldTime = Math.floorMod(online.getWorld().getTime(), 24000L);
-                long delta = shortestTimeDelta(livePlayerTime, liveWorldTime);
+                tick++;
+                double progress = Math.min(1.0D, tick / (double) durationTicks);
+                double eased = progress * progress * (3.0D - 2.0D * progress);
+                long offset = Math.round(initialOffset * (1.0D - eased));
 
-                if (Math.abs(delta) <= 2L) {
+                if (Math.abs(offset) <= 1L || progress >= 1.0D) {
                     online.resetPlayerTime();
                     BukkitTask activeTask = playerTimeGradients.remove(targetId);
                     if (activeTask != null) {
@@ -177,17 +180,12 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                long speed = Math.max(30L, Math.abs(delta) / 12L);
-                speed = Math.min(speed, 240L);
-                long adjustment = delta > 0L ? speed : -speed;
-
-                long nextTime = Math.floorMod(livePlayerTime + adjustment, 24000L);
-                online.setPlayerTime(nextTime, false);
+                online.setPlayerTime(offset, true);
             }
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando timelapse rápido y suave para " + target.getName() + " (actualización cada tick).");
+        sender.sendMessage(C_GREEN + "Aplicando timelapse rápido y súper suave para " + target.getName() + " (actualización cada tick).");
     }
 
     private static long shortestTimeDelta(long fromTime, long toTime) {
