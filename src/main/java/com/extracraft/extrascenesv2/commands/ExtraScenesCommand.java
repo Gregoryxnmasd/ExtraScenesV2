@@ -357,17 +357,27 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStop(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(C_RED + "Only players can use /scenes stop.");
+        Player target;
+        if (args.length >= 2) {
+            target = Bukkit.getPlayerExact(args[1]);
+            if (target == null) {
+                sender.sendMessage(C_RED + "Player not found: " + args[1]);
+                return;
+            }
+        } else {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(C_RED + "Console must provide a target player: /scenes stop <player>");
+                return;
+            }
+            target = player;
+        }
+
+        if (!playbackService.stop(target, true)) {
+            sender.sendMessage(C_RED + target.getName() + " is not playing any scene.");
             return;
         }
 
-        if (!playbackService.stop(player)) {
-            sender.sendMessage(C_RED + "You are not playing any scene.");
-            return;
-        }
-
-        sender.sendMessage(C_GREEN + "Scene stopped.");
+        sender.sendMessage(C_GREEN + "Scene stopped for " + target.getName() + ".");
     }
 
     private void handleRecord(CommandSender sender, String[] args) {
@@ -1596,7 +1606,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes create <scene> <durationTicks>");
         sender.sendMessage(C_YELLOW + "/scenes edit <scene>");
         sender.sendMessage(C_YELLOW + "/scenes play <scene> [player] [startTick] [endTick]");
-        sender.sendMessage(C_YELLOW + "/scenes stop");
+        sender.sendMessage(C_YELLOW + "/scenes stop [player]");
         sender.sendMessage(C_YELLOW + "/scenes record start <scene> [everyTicks] [duration:10s|200t]");
         sender.sendMessage(C_YELLOW + "/scenes record stop");
         sender.sendMessage(C_YELLOW + "/scenes record clear <scene> confirm");
@@ -1789,6 +1799,13 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             Bukkit.getOnlinePlayers().stream().map(Player::getName).forEach(options::add);
             options.add("0");
             return options.stream().filter(option -> option.toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("stop")) {
+            return Bukkit.getOnlinePlayers().stream()
+                    .map(Player::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
         }
 
         if (args.length == 3 && Arrays.asList("edit", "delete", "show").contains(args[0].toLowerCase(Locale.ROOT))) {
