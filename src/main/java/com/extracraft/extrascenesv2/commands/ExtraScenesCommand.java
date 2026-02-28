@@ -150,6 +150,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         final UUID targetId = target.getUniqueId();
+        final long maxStepPerTick = 5L;
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
             @Override

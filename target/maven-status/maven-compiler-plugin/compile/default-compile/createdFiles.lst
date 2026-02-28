@@ -3,6 +3,7 @@ com\extracraft\extrascenesv2\listeners\TimelineEditorListener.class
 com\extracraft\extrascenesv2\placeholders\ExtraCraftSubtitleExpansion.class
 com\extracraft\extrascenesv2\cinematics\CinematicPlaybackService$PlaybackState.class
 com\extracraft\extrascenesv2\cinematics\CinematicSubtitleCue.class
+com\extracraft\extrascenesv2\commands\ExtraScenesCommand$1.class
 com\extracraft\extrascenesv2\cinematics\Cinematic$EndActionType.class
 com\extrascenesv2\ExtraScenesPlugin.class
 com\extracraft\extrascenesv2\commands\ExtraScenesCommand$RecordingState.class
