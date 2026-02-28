@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
@@ -275,6 +276,8 @@ public final class CinematicManager {
 
         String endActionPath = "endAction";
         config.set(endActionPath + ".type", cinematic.getEndAction().type().name().toLowerCase(Locale.ROOT));
+        GameMode gameMode = cinematic.getEndAction().gameMode();
+        config.set(endActionPath + ".gameMode", gameMode == null ? null : gameMode.name().toLowerCase(Locale.ROOT));
         Location teleportLocation = cinematic.getEndAction().teleportLocation();
         if (teleportLocation == null || teleportLocation.getWorld() == null) {
             config.set(endActionPath + ".teleport", null);
@@ -828,21 +831,23 @@ public final class CinematicManager {
             return Cinematic.EndAction.stayAtLastCameraPoint();
         }
 
+        GameMode gameMode = parseEndGameMode(section.getString("gameMode"));
         Cinematic.EndActionType type = Cinematic.EndActionType.fromString(section.getString("type"));
         if (type != Cinematic.EndActionType.TELEPORT) {
-            return type == Cinematic.EndActionType.RETURN_TO_START
+            Cinematic.EndAction endAction = type == Cinematic.EndActionType.RETURN_TO_START
                     ? Cinematic.EndAction.returnToStart()
                     : Cinematic.EndAction.stayAtLastCameraPoint();
+            return endAction.withGameMode(gameMode);
         }
 
         ConfigurationSection teleportSection = section.getConfigurationSection("teleport");
         if (teleportSection == null) {
-            return Cinematic.EndAction.stayAtLastCameraPoint();
+            return Cinematic.EndAction.stayAtLastCameraPoint().withGameMode(gameMode);
         }
 
         World world = Bukkit.getWorld(teleportSection.getString("world", ""));
         if (world == null) {
-            return Cinematic.EndAction.stayAtLastCameraPoint();
+            return Cinematic.EndAction.stayAtLastCameraPoint().withGameMode(gameMode);
         }
 
         double x = teleportSection.getDouble("x");
@@ -850,7 +855,20 @@ public final class CinematicManager {
         double z = teleportSection.getDouble("z");
         float yaw = (float) teleportSection.getDouble("yaw");
         float pitch = (float) teleportSection.getDouble("pitch");
-        return Cinematic.EndAction.teleportTo(new Location(world, x, y, z, yaw, pitch));
+        return Cinematic.EndAction.teleportTo(new Location(world, x, y, z, yaw, pitch)).withGameMode(gameMode);
+    }
+
+    private static GameMode parseEndGameMode(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+
+        for (GameMode gameMode : GameMode.values()) {
+            if (gameMode.name().equalsIgnoreCase(rawValue)) {
+                return gameMode;
+            }
+        }
+        return null;
     }
 
     public boolean undo(String id) {
@@ -928,7 +946,8 @@ public final class CinematicManager {
                 && java.util.Objects.equals(a.getAudioTrack(), b.getAudioTrack())
                 && a.getSubtitleCues().equals(b.getSubtitleCues())
                 && java.util.Objects.equals(a.getEndAction().type(), b.getEndAction().type())
-                && java.util.Objects.equals(a.getEndAction().teleportLocation(), b.getEndAction().teleportLocation());
+                && java.util.Objects.equals(a.getEndAction().teleportLocation(), b.getEndAction().teleportLocation())
+                && java.util.Objects.equals(a.getEndAction().gameMode(), b.getEndAction().gameMode());
     }
 
     private String normalizeId(String id) {
