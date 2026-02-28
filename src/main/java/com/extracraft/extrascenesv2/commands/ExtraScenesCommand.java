@@ -140,21 +140,19 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         final long playerTime = Math.floorMod(target.getPlayerTime(), 24000L);
-        final int totalSteps = 100;
-        final long predictedWorldTimeAtEnd = Math.floorMod(target.getWorld().getTime() + totalSteps, 24000L);
-        final long forwardDelta = Math.floorMod(predictedWorldTimeAtEnd - playerTime, 24000L);
+        final long worldTime = Math.floorMod(target.getWorld().getTime(), 24000L);
+        final long initialDelta = shortestTimeDelta(playerTime, worldTime);
 
-        if (forwardDelta == 0L) {
+        if (Math.abs(initialDelta) <= 1L) {
             target.resetPlayerTime();
             sender.sendMessage(C_GREEN + "El tiempo de " + target.getName() + " ya estaba sincronizado con el mundo.");
             return;
         }
 
         final UUID targetId = target.getUniqueId();
+        final long maxStepPerTick = 5L;
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-            private int step = 0;
-
             @Override
             public void run() {
                 Player online = Bukkit.getPlayer(targetId);
@@ -166,8 +164,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                step++;
-                if (step >= totalSteps) {
+                long livePlayerTime = Math.floorMod(online.getPlayerTime(), 24000L);
+                long liveWorldTime = Math.floorMod(online.getWorld().getTime(), 24000L);
+                long delta = shortestTimeDelta(livePlayerTime, liveWorldTime);
+
+                if (Math.abs(delta) <= 1L) {
                     online.resetPlayerTime();
                     BukkitTask activeTask = playerTimeGradients.remove(targetId);
                     if (activeTask != null) {
@@ -176,15 +177,24 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                double progress = step / (double) totalSteps;
-                double easedProgress = 0.5D - (0.5D * Math.cos(Math.PI * progress));
-                long nextTime = Math.floorMod(Math.round(playerTime + (forwardDelta * easedProgress)), 24000L);
+                long adjustment = Math.min(maxStepPerTick, Math.abs(delta));
+                if (delta < 0L) {
+                    adjustment = -adjustment;
+                }
+
+                long nextTime = Math.floorMod(livePlayerTime + adjustment, 24000L);
                 online.setPlayerTime(nextTime, false);
             }
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando transición de tiempo exageradamente suave (~5s) para " + target.getName() + ".");
+        sender.sendMessage(C_GREEN + "Aplicando sincronización timelapse ultra suave para " + target.getName() + " (ajustes cada tick).");
+    }
+
+    private static long shortestTimeDelta(long fromTime, long toTime) {
+        long forward = Math.floorMod(toTime - fromTime, 24000L);
+        long backward = forward - 24000L;
+        return Math.abs(backward) < forward ? backward : forward;
     }
 
     private void handleCreate(CommandSender sender, String[] args) {
