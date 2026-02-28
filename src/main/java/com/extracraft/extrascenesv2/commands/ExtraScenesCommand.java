@@ -168,7 +168,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 long liveWorldTime = Math.floorMod(online.getWorld().getTime(), 24000L);
                 long delta = shortestTimeDelta(livePlayerTime, liveWorldTime);
 
-                if (Math.abs(delta) <= 1L) {
+                if (Math.abs(delta) <= 2L) {
                     online.resetPlayerTime();
                     BukkitTask activeTask = playerTimeGradients.remove(targetId);
                     if (activeTask != null) {
@@ -177,10 +177,9 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
 
-                long adjustment = Math.min(maxStepPerTick, Math.abs(delta));
-                if (delta < 0L) {
-                    adjustment = -adjustment;
-                }
+                long speed = Math.max(30L, Math.abs(delta) / 12L);
+                speed = Math.min(speed, 240L);
+                long adjustment = delta > 0L ? speed : -speed;
 
                 long nextTime = Math.floorMod(livePlayerTime + adjustment, 24000L);
                 online.setPlayerTime(nextTime, false);
@@ -188,7 +187,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }, 1L, 1L);
 
         playerTimeGradients.put(targetId, task);
-        sender.sendMessage(C_GREEN + "Aplicando sincronización timelapse ultra suave para " + target.getName() + " (ajustes cada tick).");
+        sender.sendMessage(C_GREEN + "Aplicando timelapse rápido y suave para " + target.getName() + " (actualización cada tick).");
     }
 
     private static long shortestTimeDelta(long fromTime, long toTime) {
