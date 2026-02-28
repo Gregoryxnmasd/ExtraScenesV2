@@ -10,7 +10,7 @@ softdepend: [ProtocolLib, OpenAudioMc, OpenAudioMC]
 commands:
   extrascenes:
     description: Scene system
-    usage: /extrascenes <create|edit|play|stop|record|actor|key|tickcmd|audio|subtitle|undo|redo|placeholders|delete|list|show|reload>
+    usage: /extrascenes <create|edit|play|stop|record|actor|key|tickcmd|audio|subtitle|undo|redo|placeholders|delete|list|show|editor|time|reload>
     aliases: [scenes]
     permission: extrascenes.use
 permissions:
