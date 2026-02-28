@@ -409,7 +409,11 @@ public final class CinematicPlaybackService {
             }
         }
 
+        GameMode configuredGameMode = endAction.gameMode();
         stop(player);
+        if (configuredGameMode != null && player.isOnline()) {
+            player.setGameMode(configuredGameMode);
+        }
     }
 
     private void runLifecycleCommands(Player player, PlaybackState state, List<String> commands, int tick) {
