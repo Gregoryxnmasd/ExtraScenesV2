@@ -867,7 +867,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 saveActorRecording(online);
                 return;
             }
-            state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), online.getPose().name()));
+            state.frames.add(new ActorFrame(state.tick, online.getLocation(), online.getEyeLocation().getYaw(), resolveActorPoseForRecording(online)));
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
                 actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
                 playbackService.syncSubtitleForTick(online, cinematic, state.tick);
@@ -895,6 +895,16 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
         player.sendActionBar(Component.text(C_AQUA + line1 + (line2.isBlank() ? "" : C_GRAY + " | " + C_AQUA + line2)));
+    }
+
+    private String resolveActorPoseForRecording(Player player) {
+        if (player == null) {
+            return "STANDING";
+        }
+        if (player.isInsideVehicle()) {
+            return "SITTING";
+        }
+        return player.getPose().name();
     }
 
     private void startActorRecordingAudio(Player player, ActorRecordingState state) {
