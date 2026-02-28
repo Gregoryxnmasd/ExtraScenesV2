@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.bukkit.Location;
+import org.bukkit.GameMode;
 
 public final class Cinematic {
 
@@ -199,22 +200,28 @@ public final class Cinematic {
     public static final class EndAction {
         private final EndActionType type;
         private final Location teleportLocation;
+        private final GameMode gameMode;
 
-        private EndAction(EndActionType type, Location teleportLocation) {
+        private EndAction(EndActionType type, Location teleportLocation, GameMode gameMode) {
             this.type = type;
             this.teleportLocation = teleportLocation == null ? null : teleportLocation.clone();
+            this.gameMode = gameMode;
         }
 
         public static EndAction returnToStart() {
-            return new EndAction(EndActionType.RETURN_TO_START, null);
+            return new EndAction(EndActionType.RETURN_TO_START, null, null);
         }
 
         public static EndAction stayAtLastCameraPoint() {
-            return new EndAction(EndActionType.STAY_AT_LAST_CAMERA_POINT, null);
+            return new EndAction(EndActionType.STAY_AT_LAST_CAMERA_POINT, null, null);
         }
 
         public static EndAction teleportTo(Location teleportLocation) {
-            return new EndAction(EndActionType.TELEPORT, teleportLocation);
+            return new EndAction(EndActionType.TELEPORT, teleportLocation, null);
+        }
+
+        public EndAction withGameMode(GameMode gameMode) {
+            return new EndAction(type, teleportLocation, gameMode);
         }
 
         public EndActionType type() {
@@ -223,6 +230,10 @@ public final class Cinematic {
 
         public Location teleportLocation() {
             return teleportLocation == null ? null : teleportLocation.clone();
+        }
+
+        public GameMode gameMode() {
+            return gameMode;
         }
     }
 }
