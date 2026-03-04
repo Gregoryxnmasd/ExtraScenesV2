@@ -60,6 +60,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private static final Pattern SIGNATURE_PATTERN = Pattern.compile("\"signature\"\\s*:\\s*\"([^\"]+)\"");
     private static final String PLAYER_SKIN_MODE_TEXTURE = "__viewer_player_skin__";
     private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
+    private static final int ACTOR_RECORDING_SAMPLE_EVERY_TICKS = 3;
 
     private final JavaPlugin plugin;
     private final CinematicManager manager;
@@ -855,8 +856,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        state.recordingStartNanos = System.nanoTime() - (state.tick * 50_000_000L);
-        state.lastRecordedTick = state.tick - 1;
+        state.lastRecordedTick = state.tick;
         startActorRecordingAudio(player, state);
 
         state.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
@@ -866,13 +866,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
                 return;
             }
 
-            int targetTick = state.computeTickFromRealtime();
-            if (targetTick > state.maxTicks) {
-                saveActorRecording(online);
-                return;
-            }
-
-            state.appendMissingFrames(online, targetTick);
+            int targetTick = Math.min(state.maxTicks, state.tick + ACTOR_RECORDING_SAMPLE_EVERY_TICKS);
+            state.appendFrame(online, targetTick);
             manager.getCinematic(state.sceneId).ifPresent(cinematic -> {
                 actorPreviewService.tick(online, cinematic, state.tick, state.actorId);
                 playbackService.syncSubtitleForTick(online, cinematic, state.tick);
@@ -1928,7 +1923,6 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         private BukkitTask countdownTaskTwo;
         private String audioStopCommand;
         private boolean audioPlaying;
-        private long recordingStartNanos;
         private int lastRecordedTick;
 
         private ActorRecordingState(String sceneId, String actorId, int maxTicks, int startTick) {
@@ -1938,13 +1932,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             this.tick = Math.max(0, startTick);
         }
 
-        private int computeTickFromRealtime() {
-            long elapsedNanos = Math.max(0L, System.nanoTime() - recordingStartNanos);
-            long elapsedTicks = elapsedNanos / 50_000_000L;
-            return (int) Math.min(Integer.MAX_VALUE, elapsedTicks);
-        }
-
-        private void appendMissingFrames(Player player, int targetTick) {
+        private void appendFrame(Player player, int targetTick) {
             if (targetTick <= lastRecordedTick) {
                 tick = Math.max(0, targetTick);
                 return;
@@ -1953,9 +1941,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             Location location = player.getLocation();
             float headYaw = player.getEyeLocation().getYaw();
             String pose = player.isInsideVehicle() ? "SITTING" : player.getPose().name();
-            for (int frameTick = lastRecordedTick + 1; frameTick <= targetTick; frameTick++) {
-                frames.add(new ActorFrame(frameTick, location.clone(), headYaw, pose));
-            }
+            frames.add(new ActorFrame(targetTick, location.clone(), headYaw, pose));
             lastRecordedTick = targetTick;
             tick = targetTick;
         }
