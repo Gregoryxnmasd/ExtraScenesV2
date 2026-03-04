@@ -41,6 +41,7 @@ public final class ActorPlaybackService {
     private static final String PLAYER_SKIN_MODE_SIGNATURE = "__viewer_player_skin__";
 
     private static final long[] SCALE_RETRY_DELAYS = {1L, 5L, 20L};
+    private static final double SEAT_Y_OFFSET = -1.45D;
     private static final List<String> SCALE_ATTRIBUTE_KEYS = List.of(
             "minecraft:scale",
             "scale",
@@ -164,6 +165,9 @@ public final class ActorPlaybackService {
             sendScaleAttribute(viewer, entityId, actor.scale());
             scheduleScaleRetries(viewer, actor.id(), entityId, actor.scale());
             hideNameTag(viewer, virtualActor);
+            if (isSittingPose(initialFrame.pose())) {
+                ensureSeat(viewer, virtualActor, initialFrame.location());
+            }
 
             return virtualActor;
         } catch (RuntimeException ex) {
@@ -208,17 +212,20 @@ public final class ActorPlaybackService {
     private void move(Player viewer, VirtualActor actor, ActorFrame targetFrame) {
         Location target = targetFrame.location();
         Location current = actor.location();
-        double deltaX = target.getX() - current.getX();
-        double deltaY = target.getY() - current.getY();
-        double deltaZ = target.getZ() - current.getZ();
-        boolean requiresTeleport = Math.abs(deltaX) > RELATIVE_MOVE_THRESHOLD
-            || Math.abs(deltaY) > RELATIVE_MOVE_THRESHOLD
-            || Math.abs(deltaZ) > RELATIVE_MOVE_THRESHOLD;
+        boolean sitting = isSittingPose(targetFrame.pose());
 
-        if (requiresTeleport) {
-            teleport(viewer, actor.entityId(), target);
+        if (sitting) {
+            ensureSeat(viewer, actor, target);
+            Location seatLocation = actor.seatLocation();
+            if (seatLocation != null) {
+                moveEntity(viewer, actor.seatEntityId(), seatLocation, seatLocation(target), target.getYaw(), target.getPitch());
+            }
         } else {
-            relativeMove(viewer, actor.entityId(), current, deltaX, deltaY, deltaZ, target.getYaw(), target.getPitch());
+            removeSeat(viewer, actor);
+        }
+
+        if (!sitting) {
+            moveEntity(viewer, actor.entityId(), current, target, target.getYaw(), target.getPitch());
         }
 
         sendHeadRotation(viewer, actor.entityId(), targetFrame.headYaw());
@@ -229,6 +236,22 @@ public final class ActorPlaybackService {
 
         updateLocation(current, target);
         actor.setHeadYaw(targetFrame.headYaw());
+    }
+
+    private void moveEntity(Player viewer, int entityId, Location current, Location target, float yaw, float pitch) {
+        double deltaX = target.getX() - current.getX();
+        double deltaY = target.getY() - current.getY();
+        double deltaZ = target.getZ() - current.getZ();
+        boolean requiresTeleport = Math.abs(deltaX) > RELATIVE_MOVE_THRESHOLD
+            || Math.abs(deltaY) > RELATIVE_MOVE_THRESHOLD
+            || Math.abs(deltaZ) > RELATIVE_MOVE_THRESHOLD;
+
+        if (requiresTeleport) {
+            teleport(viewer, entityId, target);
+        } else {
+            relativeMove(viewer, entityId, current, deltaX, deltaY, deltaZ, yaw, pitch);
+        }
+        updateLocation(current, target);
     }
 
     private void teleport(Player viewer, int entityId, Location location) {
@@ -278,6 +301,16 @@ public final class ActorPlaybackService {
             destroy.getIntegerArrays().write(0, new int[]{actor.entityId()});
         }
         sendPacket(viewer, destroy);
+
+        if (actor.seatEntityId() != -1) {
+            PacketContainer destroySeat = protocolManager.createPacket(PacketType.Play.Server.ENTITY_DESTROY);
+            if (destroySeat.getIntLists().size() > 0) {
+                destroySeat.getIntLists().write(0, List.of(actor.seatEntityId()));
+            } else if (destroySeat.getIntegerArrays().size() > 0) {
+                destroySeat.getIntegerArrays().write(0, new int[]{actor.seatEntityId()});
+            }
+            sendPacket(viewer, destroySeat);
+        }
 
         removeFromPlayerInfo(viewer, actor.profileId());
         showNameTag(viewer, actor);
@@ -589,6 +622,77 @@ public final class ActorPlaybackService {
         }
     }
 
+    private boolean isSittingPose(String poseName) {
+        return poseName != null && poseName.equalsIgnoreCase("SITTING");
+    }
+
+    private Location seatLocation(Location actorLocation) {
+        Location seat = actorLocation.clone();
+        seat.setY(seat.getY() + SEAT_Y_OFFSET);
+        return seat;
+    }
+
+    private void ensureSeat(Player viewer, VirtualActor actor, Location actorLocation) {
+        if (actor.seatEntityId() != -1) {
+            return;
+        }
+
+        int seatEntityId = nextEntityId();
+        PacketContainer spawn = protocolManager.createPacket(PacketType.Play.Server.SPAWN_ENTITY);
+        Location seatLocation = seatLocation(actorLocation);
+        spawn.getIntegers().write(0, seatEntityId);
+        spawn.getUUIDs().write(0, UUID.randomUUID());
+        spawn.getEntityTypeModifier().write(0, EntityType.ARMOR_STAND);
+        spawn.getDoubles().write(0, seatLocation.getX());
+        spawn.getDoubles().write(1, seatLocation.getY());
+        spawn.getDoubles().write(2, seatLocation.getZ());
+        spawn.getBytes().write(0, angleToByte(seatLocation.getPitch()));
+        spawn.getBytes().write(1, angleToByte(seatLocation.getYaw()));
+        if (!sendPacket(viewer, spawn)) {
+            return;
+        }
+
+        PacketContainer metadata = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
+        metadata.getIntegers().write(0, seatEntityId);
+        List<WrappedDataValue> values = new ArrayList<>();
+        values.add(new WrappedDataValue(0, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x20));
+        values.add(new WrappedDataValue(5, WrappedDataWatcher.Registry.get(Boolean.class), true));
+        values.add(new WrappedDataValue(15, WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x10));
+        if (metadata.getDataValueCollectionModifier().size() > 0) {
+            metadata.getDataValueCollectionModifier().write(0, values);
+            sendPacket(viewer, metadata);
+        }
+
+        PacketContainer mount = protocolManager.createPacket(PacketType.Play.Server.MOUNT);
+        mount.getIntegers().write(0, seatEntityId);
+        mount.getIntegerArrays().write(0, new int[]{actor.entityId()});
+        sendPacket(viewer, mount);
+
+        actor.setSeatEntityId(seatEntityId);
+        actor.setSeatLocation(seatLocation);
+    }
+
+    private void removeSeat(Player viewer, VirtualActor actor) {
+        if (actor.seatEntityId() == -1) {
+            return;
+        }
+
+        PacketContainer mount = protocolManager.createPacket(PacketType.Play.Server.MOUNT);
+        mount.getIntegers().write(0, actor.seatEntityId());
+        mount.getIntegerArrays().write(0, new int[0]);
+        sendPacket(viewer, mount);
+
+        PacketContainer destroySeat = protocolManager.createPacket(PacketType.Play.Server.ENTITY_DESTROY);
+        if (destroySeat.getIntLists().size() > 0) {
+            destroySeat.getIntLists().write(0, List.of(actor.seatEntityId()));
+        } else if (destroySeat.getIntegerArrays().size() > 0) {
+            destroySeat.getIntegerArrays().write(0, new int[]{actor.seatEntityId()});
+        }
+        sendPacket(viewer, destroySeat);
+        actor.setSeatEntityId(-1);
+        actor.setSeatLocation(null);
+    }
+
     private PacketContainer createLegacyAddPlayerInfoPacket(UUID profileId, WrappedGameProfile profile, String displayName) {
         PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.PLAYER_INFO);
         WrappedChatComponent chatDisplayName = WrappedChatComponent.fromText(displayName == null ? "" : displayName);
@@ -673,6 +777,8 @@ public final class ActorPlaybackService {
         private double scale;
         private float headYaw;
         private String pose;
+        private int seatEntityId = -1;
+        private Location seatLocation;
 
         private VirtualActor(int entityId, UUID profileId, String profileName, Location location, double scale, float headYaw, String pose) {
             this.entityId = entityId;
@@ -722,6 +828,22 @@ public final class ActorPlaybackService {
 
         private void setPose(String pose) {
             this.pose = pose;
+        }
+
+        private int seatEntityId() {
+            return seatEntityId;
+        }
+
+        private void setSeatEntityId(int seatEntityId) {
+            this.seatEntityId = seatEntityId;
+        }
+
+        private Location seatLocation() {
+            return seatLocation;
+        }
+
+        private void setSeatLocation(Location seatLocation) {
+            this.seatLocation = seatLocation;
         }
 
         private String teamId() {
