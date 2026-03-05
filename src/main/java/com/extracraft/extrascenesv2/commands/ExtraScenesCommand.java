@@ -485,19 +485,20 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActor(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|select|record|recordfrom>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor <create|delete|skin|scale|window|select|record|recordfrom>");
             return;
         }
 
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "create" -> handleActorCreate(sender, args);
+            case "delete" -> handleActorDelete(sender, args);
             case "skin" -> handleActorSkin(sender, args);
             case "scale" -> handleActorScale(sender, args);
             case "window" -> handleActorWindow(sender, args);
             case "select" -> handleActorSelect(sender, args);
             case "record" -> handleActorRecord(sender, args);
             case "recordfrom" -> handleActorRecordFrom(sender, args);
-            default -> sender.sendMessage(C_RED + "Usage: /scenes actor <create|skin|scale|window|select|record|recordfrom>");
+            default -> sender.sendMessage(C_RED + "Usage: /scenes actor <create|delete|skin|scale|window|select|record|recordfrom>");
         }
     }
 
@@ -538,6 +539,21 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
         manager.save();
         sender.sendMessage(C_GREEN + "Actor guardado.");
+    }
+
+    private void handleActorDelete(CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage(C_RED + "Usage: /scenes actor delete <scene> <actorId>");
+            return;
+        }
+
+        if (!manager.removeActor(args[2], args[3])) {
+            sender.sendMessage(C_RED + "Actor o escena inválidos.");
+            return;
+        }
+
+        manager.save();
+        sender.sendMessage(C_GREEN + "Actor eliminado: " + args[3]);
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
@@ -1615,6 +1631,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes record stop");
         sender.sendMessage(C_YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(C_YELLOW + "/scenes actor create <scene> <actorId> [scale]");
+        sender.sendMessage(C_YELLOW + "/scenes actor delete <scene> <actorId>");
         sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
         sender.sendMessage(C_YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(C_YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
@@ -1737,7 +1754,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return List.of("start", "stop", "clear");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("actor")) {
-            return List.of("create", "skin", "scale", "window", "select", "record", "recordfrom");
+            return List.of("create", "delete", "skin", "scale", "window", "select", "record", "recordfrom");
         }
 
         if (args.length == 2 && args[0].equalsIgnoreCase("audio")) {
@@ -1773,11 +1790,11 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return manager.getCinematicIds().stream().filter(id -> id.startsWith(args[3])).toList();
         }
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("actor") && List.of("create", "delete", "skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
             return manager.getCinematicIds().stream().filter(s -> s.startsWith(args[2])).toList();
         }
 
-        if (args.length == 4 && args[0].equalsIgnoreCase("actor") && List.of("skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
+        if (args.length == 4 && args[0].equalsIgnoreCase("actor") && List.of("delete", "skin", "scale", "window").contains(args[1].toLowerCase(Locale.ROOT))) {
             return manager.getCinematic(args[2])
                     .map(cinematic -> cinematic.getActors().values().stream().map(SceneActor::id).filter(id -> id.startsWith(args[3])).toList())
                     .orElse(Collections.emptyList());
