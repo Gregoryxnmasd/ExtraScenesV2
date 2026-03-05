@@ -9,6 +9,7 @@ import com.extracraft.extrascenesv2.listeners.CinematicProtectionListener;
 import com.extracraft.extrascenesv2.listeners.TimelineEditorListener;
 import com.extracraft.extrascenesv2.placeholders.ExtraCraftSubtitleExpansion;
 import com.extracraft.extrascenesv2.placeholders.ScenesPlaceholderExpansion;
+import java.io.File;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -22,6 +23,7 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ensureSkinsFolder();
 
         if (getServer().getPluginManager().getPlugin("ProtocolLib") == null) {
             getLogger().severe("ProtocolLib is required for packet-based scene actors. Disabling plugin.");
@@ -49,6 +51,13 @@ public final class ExtraScenesV2Plugin extends JavaPlugin {
 
 
         getLogger().info("ExtraScenesV2 (Cinematics) enabled on " + getServer().getVersion());
+    }
+
+    private void ensureSkinsFolder() {
+        File skinsFolder = new File(getDataFolder(), "skins");
+        if (!skinsFolder.exists() && !skinsFolder.mkdirs()) {
+            getLogger().warning("No se pudo crear la carpeta de skins en " + skinsFolder.getAbsolutePath());
+        }
     }
 
     @Override
