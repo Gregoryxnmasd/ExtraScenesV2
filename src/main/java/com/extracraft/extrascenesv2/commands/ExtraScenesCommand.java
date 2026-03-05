@@ -560,7 +560,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
     private void handleActorSkin(CommandSender sender, String[] args) {
         if (args.length < 5 || args.length > 6) {
-            sender.sendMessage(C_RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName|file <skinFile>|file:<skinFile>>");
+            sender.sendMessage(C_RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName|file <skinFileName>|file:<skinFileName>>");
             return;
         }
 
@@ -580,7 +580,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 6 && "file".equalsIgnoreCase(input)) {
             SkinData skinData = loadSkinFromFile(args[5]);
             if (skinData == null) {
-                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo>.yml con texture y signature.");
+                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo> con texture y signature.");
                 return;
             }
             texture = skinData.texture();
@@ -589,7 +589,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             String skinFile = input.substring("file:".length()).trim();
             SkinData skinData = loadSkinFromFile(skinFile);
             if (skinData == null) {
-                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo>.yml con texture y signature.");
+                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo> con texture y signature.");
                 return;
             }
             texture = skinData.texture();
@@ -630,8 +630,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
             return null;
         }
 
-        String fileName = cleanName.toLowerCase(Locale.ROOT).endsWith(".yml") ? cleanName : cleanName + ".yml";
-        File skinFile = new File(skinsFolder, fileName);
+        File skinFile = resolveSkinFile(skinsFolder, cleanName);
         if (!skinFile.isFile()) {
             return null;
         }
@@ -644,6 +643,21 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         }
 
         return new SkinData(texture, signature);
+    }
+    private File resolveSkinFile(File skinsFolder, String cleanName) {
+        File exactFile = new File(skinsFolder, cleanName);
+        if (exactFile.isFile()) {
+            return exactFile;
+        }
+
+        if (!cleanName.toLowerCase(Locale.ROOT).endsWith(".yml")) {
+            File ymlFile = new File(skinsFolder, cleanName + ".yml");
+            if (ymlFile.isFile()) {
+                return ymlFile;
+            }
+        }
+
+        return exactFile;
     }
 
     private File getSkinsFolder() {
@@ -1693,7 +1707,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(C_YELLOW + "/scenes actor create <scene> <actorId> [scale]");
         sender.sendMessage(C_YELLOW + "/scenes actor delete <scene> <actorId>");
-        sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName|file <skinFile>|file:<skinFile>>");
+        sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName|file <skinFileName>|file:<skinFileName>>");
         sender.sendMessage(C_YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(C_YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(C_YELLOW + "/scenes actor select <actorId> (con editor abierto)");
@@ -1871,7 +1885,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 6 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin") && args[4].equalsIgnoreCase("file")) {
             File skinsFolder = getSkinsFolder();
-            File[] skinFiles = skinsFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+            File[] skinFiles = skinsFolder.listFiles(File::isFile);
             if (skinFiles == null) {
                 return Collections.emptyList();
             }
@@ -2060,3 +2074,5 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     private record SkinData(String texture, String signature) {
     }
 }
+
+
