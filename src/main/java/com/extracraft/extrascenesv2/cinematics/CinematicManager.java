@@ -597,6 +597,24 @@ public final class CinematicManager {
         return true;
     }
 
+    public boolean removeActor(String sceneId, String actorId) {
+        String key = normalizeId(sceneId);
+        Cinematic cinematic = cinematics.get(key);
+        if (cinematic == null) {
+            return false;
+        }
+
+        Map<String, SceneActor> updatedActors = new LinkedHashMap<>(cinematic.getActors());
+        if (updatedActors.remove(normalizeId(actorId)) == null) {
+            return false;
+        }
+
+        rememberUndoSnapshot(key, cinematic);
+        cinematics.put(key, new Cinematic(cinematic.getId(), cinematic.getDurationTicks(), cinematic.getPoints(), cinematic.getEndAction(), cinematic.getTickCommands(), updatedActors, cinematic.shouldHidePlayersDuringPlayback(), cinematic.getAudioTrack(), cinematic.getStartCommands(), cinematic.getEndCommands(), cinematic.getSubtitleCues()));
+        save();
+        return true;
+    }
+
 
     public boolean setActorWindow(String sceneId, String actorId, int appearAtTick, int disappearAtTick) {
         String key = normalizeId(sceneId);
