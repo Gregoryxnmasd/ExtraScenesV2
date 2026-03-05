@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,6 +40,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -557,8 +559,8 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleActorSkin(CommandSender sender, String[] args) {
-        if (args.length != 5) {
-            sender.sendMessage(C_RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName>");
+        if (args.length < 5 || args.length > 6) {
+            sender.sendMessage(C_RED + "Usage: /scenes actor skin <scene> <actorId> <player|playerName|file <skinFile>|file:<skinFile>>");
             return;
         }
 
@@ -575,6 +577,23 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if ("player".equalsIgnoreCase(input)) {
             texture = PLAYER_SKIN_MODE_TEXTURE;
             signature = PLAYER_SKIN_MODE_SIGNATURE;
+        } else if (args.length == 6 && "file".equalsIgnoreCase(input)) {
+            SkinData skinData = loadSkinFromFile(args[5]);
+            if (skinData == null) {
+                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo>.yml con texture y signature.");
+                return;
+            }
+            texture = skinData.texture();
+            signature = skinData.signature();
+        } else if (input.toLowerCase(Locale.ROOT).startsWith("file:")) {
+            String skinFile = input.substring("file:".length()).trim();
+            SkinData skinData = loadSkinFromFile(skinFile);
+            if (skinData == null) {
+                sender.sendMessage(C_RED + "No se pudo cargar la skin desde archivo. Usa plugins/ExtraScenesV2/skins/<archivo>.yml con texture y signature.");
+                return;
+            }
+            texture = skinData.texture();
+            signature = skinData.signature();
         } else {
             SkinData skinData = fetchSkinByName(input);
             if (skinData == null) {
@@ -593,9 +612,51 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
 
         if ("player".equalsIgnoreCase(input)) {
             sender.sendMessage(C_GREEN + "Skin del actor configurada para usar la skin del jugador espectador.");
+        } else if ((args.length == 6 && "file".equalsIgnoreCase(input)) || input.toLowerCase(Locale.ROOT).startsWith("file:")) {
+            sender.sendMessage(C_GREEN + "Skin del actor cargada desde archivo.");
         } else {
             sender.sendMessage(C_GREEN + "Skin del actor guardada para " + input + ".");
         }
+    }
+
+    private SkinData loadSkinFromFile(String skinFileName) {
+        String cleanName = skinFileName == null ? "" : skinFileName.trim();
+        if (cleanName.isEmpty() || cleanName.contains("/") || cleanName.contains("\\") || cleanName.contains("..")) {
+            return null;
+        }
+
+        File skinsFolder = getSkinsFolder();
+        if (!skinsFolder.exists() && !skinsFolder.mkdirs()) {
+            return null;
+        }
+
+        String fileName = cleanName.toLowerCase(Locale.ROOT).endsWith(".yml") ? cleanName : cleanName + ".yml";
+        File skinFile = new File(skinsFolder, fileName);
+        if (!skinFile.isFile()) {
+            return null;
+        }
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(skinFile);
+        String texture = pickFirstNonBlank(config.getString("texture"), config.getString("skin.texture"));
+        String signature = pickFirstNonBlank(config.getString("signature"), config.getString("skin.signature"));
+        if (texture == null || signature == null) {
+            return null;
+        }
+
+        return new SkinData(texture, signature);
+    }
+
+    private File getSkinsFolder() {
+        return new File(plugin.getDataFolder(), "skins");
+    }
+
+    private String pickFirstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private SkinData fetchSkinByName(String username) {
@@ -1632,7 +1693,7 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(C_YELLOW + "/scenes record clear <scene> confirm");
         sender.sendMessage(C_YELLOW + "/scenes actor create <scene> <actorId> [scale]");
         sender.sendMessage(C_YELLOW + "/scenes actor delete <scene> <actorId>");
-        sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName>");
+        sender.sendMessage(C_YELLOW + "/scenes actor skin <scene> <actorId> <player|playerName|file <skinFile>|file:<skinFile>>");
         sender.sendMessage(C_YELLOW + "/scenes actor scale <scene> <actorId> <scale>");
         sender.sendMessage(C_YELLOW + "/scenes actor window <scene> <actorId> <appearTick> <disappearTick>");
         sender.sendMessage(C_YELLOW + "/scenes actor select <actorId> (con editor abierto)");
@@ -1803,8 +1864,26 @@ public final class ExtraScenesCommand implements CommandExecutor, TabCompleter {
         if (args.length == 5 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin")) {
             List<String> options = new ArrayList<>();
             options.add("player");
+            options.add("file");
             Bukkit.getOnlinePlayers().stream().map(Player::getName).forEach(options::add);
             return options.stream().filter(option -> option.toLowerCase(Locale.ROOT).startsWith(args[4].toLowerCase(Locale.ROOT))).toList();
+        }
+
+        if (args.length == 6 && args[0].equalsIgnoreCase("actor") && args[1].equalsIgnoreCase("skin") && args[4].equalsIgnoreCase("file")) {
+            File skinsFolder = getSkinsFolder();
+            File[] skinFiles = skinsFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+            if (skinFiles == null) {
+                return Collections.emptyList();
+            }
+            List<String> options = new ArrayList<>();
+            for (File skinFile : skinFiles) {
+                String name = skinFile.getName();
+                if (name.toLowerCase(Locale.ROOT).endsWith(".yml")) {
+                    name = name.substring(0, name.length() - 4);
+                }
+                options.add(name);
+            }
+            return options.stream().filter(option -> option.toLowerCase(Locale.ROOT).startsWith(args[5].toLowerCase(Locale.ROOT))).toList();
         }
 
 
